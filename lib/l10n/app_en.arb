@@ -1,0 +1,94 @@
+{
+  "@@locale": "en",
+  "appName": "Caption Trans",
+  "settings": "Settings",
+  "save": "Save",
+  "cancel": "Cancel",
+  "close": "Close",
+  "error": "Error",
+  "stepSelectVideo": "Select Video",
+  "clickToSelectVideo": "Click to select a video file",
+  "supportedFormats": "Supports MP4, MKV, AVI, MOV, WebM and more",
+  "videoSelected": "Video file selected",
+  "changeFile": "Change file",
+  "clear": "Clear",
+  "stepExtractSubtitles": "Extract Subtitles",
+  "whisperModel": "Whisper Model",
+  "extract": "Extract",
+  "downloadingModel": "Downloading model {name}...",
+  "@downloadingModel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "extractingAudio": "Extracting audio from video...",
+  "processingTranscription": "Whisper is processing...",
+  "segmentsExtracted": "{count} segments extracted ({lang})",
+  "@segmentsExtracted": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "lang": {
+        "type": "String"
+      }
+    }
+  },
+  "stepTranslate": "Translate",
+  "geminiApiKey": "API Key",
+  "enterApiKey": "Enter your API Key",
+  "aiProvider": "AI Provider",
+  "geminiModel": "AI Model",
+  "enterGeminiModel": "e.g., gemini-2.0-flash, gpt-4o",
+  "targetLanguage": "Target Language",
+  "translate": "Translate",
+  "initializingTranslation": "Initializing translation...",
+  "translatingProgress": "Translating subtitles ({completed}/{total})...",
+  "@translatingProgress": {
+    "placeholders": {
+      "completed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "segmentsTranslated": "{count} segments translated to {lang}",
+  "@segmentsTranslated": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "lang": {
+        "type": "String"
+      }
+    }
+  },
+  "stepPreviewExport": "Preview & Export",
+  "exportOriginal": "Export Original",
+  "exportTranslated": "Export Translated",
+  "exportBilingual": "Export Bilingual",
+  "noSubtitlesYet": "No subtitles yet",
+  "completeTranscriptionFirst": "Complete the transcription step to see subtitles here",
+  "exportedTo": "Exported to {path}",
+  "@exportedTo": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "exportSrt": "Export SRT",
+  "settingsTitle": "Settings",
+  "apiKeyHint": "Paste your API key here",
+  "getApiKeyHint": "Get your API key from the selected AI provider's dashboard",
+  "language": "Language",
+  "chinese": "中文",
+  "english": "English",
+  "paste": "Paste",
+  "batchSizeLabel": "Translate {count} subtitles per batch",
+  "batchSizeHint": "More: Faster, better context. Less: More stable, but more API requests."
+}

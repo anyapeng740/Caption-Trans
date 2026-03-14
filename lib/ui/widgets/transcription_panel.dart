@@ -1,0 +1,224 @@
+import 'package:flutter/material.dart';
+import '../../blocs/transcription/transcription_state.dart';
+import '../../core/constants.dart';
+import 'package:caption_trans/l10n/app_localizations.dart';
+
+/// Panel for controlling Whisper transcription.
+class TranscriptionPanel extends StatelessWidget {
+  final TranscriptionState state;
+  final String selectedModel;
+  final ValueChanged<String> onModelChanged;
+  final VoidCallback onStartTranscription;
+
+  const TranscriptionPanel({
+    super.key,
+    required this.state,
+    required this.selectedModel,
+    required this.onModelChanged,
+    required this.onStartTranscription,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context)!;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.whisperModel,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.6),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedModel,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                        ),
+                        items: AppConstants.whisperModels.entries
+                            .map((e) => DropdownMenuItem(
+                                  value: e.key,
+                                  child: Text(e.value,
+                                      style: const TextStyle(fontSize: 14)),
+                                ))
+                            .toList(),
+                        onChanged: _isProcessing
+                            ? null
+                            : (v) {
+                                if (v != null) onModelChanged(v);
+                              },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                _buildStartButton(context, l10n),
+              ],
+            ),
+            if (_isProcessing || state is TranscriptionComplete || state is TranscriptionError)
+              Padding(
+                padding: const EdgeInsets.only(top: 20),
+                child: _buildStatusWidget(context, l10n),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  bool get _isProcessing =>
+      state is ModelDownloading ||
+      state is AudioExtracting ||
+      state is Transcribing;
+
+  bool get _canStart =>
+      state is VideoSelected || state is TranscriptionError;
+
+  Widget _buildStartButton(BuildContext context, AppLocalizations l10n) {
+    if (_isProcessing) {
+      return const SizedBox(
+        width: 24,
+        height: 24,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+
+    return ElevatedButton.icon(
+      onPressed: _canStart ? onStartTranscription : null,
+      icon: const Icon(Icons.play_arrow_rounded, size: 20),
+      label: Text(l10n.extract),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Colors.white,
+      ),
+    );
+  }
+
+  Widget _buildStatusWidget(BuildContext context, AppLocalizations l10n) {
+    final theme = Theme.of(context);
+
+    if (state is ModelDownloading) {
+      final s = state as ModelDownloading;
+      return _buildProgressRow(
+        context,
+        icon: Icons.download_rounded,
+        label: l10n.downloadingModel(s.modelName),
+        progress: s.progress >= 0 ? s.progress : null,
+        color: Colors.blue,
+      );
+    }
+
+    if (state is AudioExtracting) {
+      return _buildProgressRow(
+        context,
+        icon: Icons.audio_file_rounded,
+        label: l10n.extractingAudio,
+        progress: null,
+        color: Colors.orange,
+      );
+    }
+
+    if (state is Transcribing) {
+      return _buildProgressRow(
+        context,
+        icon: Icons.mic_rounded,
+        label: l10n.processingTranscription,
+        progress: null,
+        color: Colors.purple,
+      );
+    }
+
+    if (state is TranscriptionComplete) {
+      final s = state as TranscriptionComplete;
+      return Row(
+        children: [
+          const Icon(Icons.check_circle_rounded,
+              color: Colors.greenAccent, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            l10n.segmentsExtracted(
+                s.result.segments.length, s.result.language),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: Colors.greenAccent,
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (state is TranscriptionError) {
+      final s = state as TranscriptionError;
+      return Row(
+        children: [
+          const Icon(Icons.error_rounded, color: Colors.redAccent, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              s.message,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: Colors.redAccent,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildProgressRow(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required double? progress,
+    required Color color,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.8),
+                  ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: progress,
+            backgroundColor: Colors.white.withValues(alpha: 0.08),
+            valueColor: AlwaysStoppedAnimation(color),
+            minHeight: 4,
+          ),
+        ),
+      ],
+    );
+  }
+}
