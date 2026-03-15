@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:caption_trans/converter/ffmpeg_macos.dart';
+import 'package:caption_trans/converter/ffmpeg_windows.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -19,6 +20,8 @@ void main() async {
   // so it works within the macOS sandbox.
   if (Platform.isMacOS) {
     FFmpegMacOsConverter.register();
+  } else if (Platform.isWindows) {
+    FFmpegWindowsConverter.register();
   }
 
   runApp(CaptionTransApp(settingsService: settingsService));

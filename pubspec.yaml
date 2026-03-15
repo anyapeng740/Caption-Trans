@@ -15,10 +15,13 @@ dependencies:
 
   # Whisper / Audio
   whisper_ggml_plus:
-    path: whisper_ggml_plus
+    git:
+      url: https://github.com/cddqssc/whisper_ggml_plus.git
   ffmpeg_kit_flutter_new_min: ^3.1.0
-
-  universal_io: ^2.3.1
+  ffmpeg_kit_extended_flutter:
+    git:
+      url: https://github.com/cddqssc/ffmpeg-kit-extended.git
+      path: flutter
 
   # State Management
   flutter_bloc: ^8.1.5
@@ -37,6 +40,12 @@ dependencies:
   cupertino_icons: ^1.0.8
   openai_dart: ^1.4.0
 
+  universal_io: ^2.3.1
+
+ffmpeg_kit_extended_config:
+  linux: "https://github.com/akashskypatel/ffmpeg-kit-builders/releases/download/v0.8.2-linux/bundle-base-linux-x86_64-shared-small-gpl.zip"
+  windows: "https://github.com/akashskypatel/ffmpeg-kit-builders/releases/download/v0.8.2-windows/bundle-base-windows-x86_64-shared-small-gpl.zip"
+  
 dev_dependencies:
   flutter_test:
     sdk: flutter
