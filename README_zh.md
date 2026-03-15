@@ -1,8 +1,9 @@
 # Caption Trans
 
-![应用截图](screenshot_placeholder.png)
+[English Version](README.md)
 
-[English](README.md)
+## 应用截图
+![应用截图](screenshots/screenshot_zh.jpg)
 
 一站式视频字幕翻译软件。通过本地 Whisper 提取字幕，并使用 AI 将其准确翻译为目标语言。
 目前支持OpenAI、Google Gemini、DeepSeek、Ollama 等兼容 OpenAI 的 API 服务。
