@@ -33,11 +33,12 @@ class TranslationBloc extends Bloc<TranslationEvent, TranslationState> {
       final translatedSegments = await _translationService.translateAll(
         segments: event.segments,
         config: event.config,
-        onProgress: (completed, total) {
+        onProgress: (completed, total, partials) {
           if (!emit.isDone) {
             emit(TranslationInProgress(
               completed: completed,
               total: total,
+              partialSegments: partials,
               statusMessage:
                   'Translating subtitles ($completed/$total)...',
             ));

@@ -7,6 +7,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'blocs/transcription/transcription_bloc.dart';
 import 'blocs/translation/translation_bloc.dart';
+import 'blocs/project/project_bloc.dart';
+import 'blocs/project/project_event.dart';
 import 'package:caption_trans/l10n/app_localizations.dart';
 import 'services/settings_service.dart';
 import 'ui/home_page.dart';
@@ -47,6 +49,7 @@ class _CaptionTransAppState extends State<CaptionTransApp> {
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
+        BlocProvider(create: (_) => ProjectBloc()..add(const LoadProjects())),
         BlocProvider(create: (_) => TranscriptionBloc()),
         BlocProvider(create: (_) => TranslationBloc()),
       ],

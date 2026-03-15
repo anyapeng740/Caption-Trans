@@ -40,3 +40,19 @@ class CancelTranscription extends TranscriptionEvent {
 class ResetTranscription extends TranscriptionEvent {
   const ResetTranscription();
 }
+
+/// Load transcription from a saved project.
+class LoadTranscriptionFromProject extends TranscriptionEvent {
+  final String videoPath;
+  final String fileName;
+  final dynamic result;
+
+  const LoadTranscriptionFromProject({
+    required this.videoPath,
+    required this.fileName,
+    required this.result,
+  });
+
+  @override
+  List<Object?> get props => [videoPath, fileName, result];
+}

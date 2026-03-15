@@ -18,6 +18,36 @@ class TranscriptionResult extends Equatable {
     required this.segments,
   });
 
+  TranscriptionResult copyWith({
+    String? language,
+    Duration? duration,
+    List<SubtitleSegment>? segments,
+  }) {
+    return TranscriptionResult(
+      language: language ?? this.language,
+      duration: duration ?? this.duration,
+      segments: segments ?? this.segments,
+    );
+  }
+
+  factory TranscriptionResult.fromJson(Map<String, dynamic> json) {
+    return TranscriptionResult(
+      language: json['language'] as String,
+      duration: Duration(milliseconds: json['durationMs'] as int),
+      segments: (json['segments'] as List<dynamic>)
+          .map((e) => SubtitleSegment.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'language': language,
+      'durationMs': duration.inMilliseconds,
+      'segments': segments.map((e) => e.toJson()).toList(),
+    };
+  }
+
   @override
   List<Object?> get props => [language, duration, segments];
 }

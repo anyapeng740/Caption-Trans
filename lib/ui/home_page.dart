@@ -19,6 +19,13 @@ import 'widgets/transcription_panel.dart';
 import 'widgets/translation_panel.dart';
 import 'widgets/subtitle_preview.dart';
 import 'widgets/settings_dialog.dart';
+import 'project_list_page.dart';
+import '../models/project.dart';
+import 'package:uuid/uuid.dart';
+import '../blocs/project/project_bloc.dart';
+import '../blocs/project/project_event.dart';
+import '../blocs/project/project_state.dart';
+import '../models/subtitle_segment.dart';
 
 /// Main application page with step-by-step workflow.
 class HomePage extends StatefulWidget {
@@ -47,6 +54,8 @@ class _HomePageState extends State<HomePage> {
   int _batchSize = 25;
   List<String> _availableModels = [];
   bool _isLoadingModels = false;
+
+  Project? _activeProject;
 
   @override
   void initState() {
@@ -138,18 +147,55 @@ class _HomePageState extends State<HomePage> {
                         number: '1',
                       ),
                       const SizedBox(height: 12),
-                      BlocBuilder<TranscriptionBloc, TranscriptionState>(
-                        builder: (context, state) {
-                          return VideoPickerCard(
-                            selectedFileName: _getFileName(state),
-                            onPickVideo: () => _pickVideo(context),
-                            onClear: state is! TranscriptionInitial
-                                ? () => context.read<TranscriptionBloc>().add(
-                                    const ResetTranscription(),
-                                  )
-                                : null,
-                          );
-                        },
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 1,
+                            child: BlocConsumer<TranscriptionBloc, TranscriptionState>(
+                              listener: (context, state) {
+                                if (state is TranscriptionComplete) {
+                                  if (_activeProject == null ||
+                                      _activeProject!.name != state.fileName) {
+                                    // Create a new project when transcription finishes initially
+                                    _activeProject = Project(
+                                      id: const Uuid().v4(),
+                                      name: state.fileName,
+                                      videoPath: state.videoPath,
+                                      createdAt: DateTime.now(),
+                                      updatedAt: DateTime.now(),
+                                      transcription: state.result,
+                                      translationConfig: null,
+                                    );
+                                    context.read<ProjectBloc>().add(
+                                      AddProject(_activeProject!),
+                                    );
+                                  } else {
+                                    // Update existing active project if for some reason transcription completes again
+                                    // Should not really happen on normal resume since it bypasses extraction
+                                  }
+                                } else if (state is TranscriptionInitial ||
+                                    state is VideoSelected) {
+                                  _activeProject =
+                                      null; // Reset on new video pick
+                                }
+                              },
+                              builder: (context, state) {
+                                return VideoPickerCard(
+                                  selectedFileName: _getFileName(state),
+                                  onPickVideo: () => _pickVideo(context),
+                                  onClear: state is! TranscriptionInitial
+                                      ? () => context
+                                            .read<TranscriptionBloc>()
+                                            .add(const ResetTranscription())
+                                      : null,
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(flex: 1, child: _buildEmbeddedProjectList()),
+                        ],
                       ),
 
                       const SizedBox(height: 32),
@@ -197,6 +243,34 @@ class _HomePageState extends State<HomePage> {
                                 backgroundColor: Colors.red.shade700,
                               ),
                             );
+                          } else if (state is TranslationInProgress &&
+                              state.partialSegments != null) {
+                            if (_activeProject != null) {
+                              final updatedResult = _activeProject!
+                                  .transcription
+                                  .copyWith(segments: state.partialSegments!);
+                              _activeProject = _activeProject!.copyWith(
+                                transcription: updatedResult,
+                                updatedAt: DateTime.now(),
+                              );
+                              context.read<ProjectBloc>().add(
+                                UpdateProject(_activeProject!),
+                              );
+                            }
+                          } else if (state is TranslationComplete) {
+                            if (_activeProject != null) {
+                              final updatedResult = _activeProject!
+                                  .transcription
+                                  .copyWith(segments: state.translatedSegments);
+                              _activeProject = _activeProject!.copyWith(
+                                transcription: updatedResult,
+                                updatedAt: DateTime.now(),
+                                translationConfig: state.config,
+                              );
+                              context.read<ProjectBloc>().add(
+                                UpdateProject(_activeProject!),
+                              );
+                            }
                           }
                         },
                         builder: (context, translationState) {
@@ -397,28 +471,52 @@ class _HomePageState extends State<HomePage> {
       builder: (context, translationState) {
         return BlocBuilder<TranscriptionBloc, TranscriptionState>(
           builder: (context, transcriptionState) {
-            final segments = translationState is TranslationComplete
-                ? translationState.translatedSegments
-                : (transcriptionState is TranscriptionComplete
-                      ? transcriptionState.result.segments
-                      : null);
+            List<SubtitleSegment>? segments;
+            bool hasTranslation = false;
+
+            if (translationState is TranslationComplete) {
+              segments = translationState.translatedSegments;
+              hasTranslation = true;
+            } else if (transcriptionState is TranscriptionComplete) {
+              segments = transcriptionState.result.segments;
+              // Check if the loaded project naturally has translations
+              hasTranslation = segments.any(
+                (s) => s.translatedText?.isNotEmpty == true,
+              );
+            }
 
             return SubtitlePreview(
               segments: segments,
-              hasTranslation: translationState is TranslationComplete,
+              hasTranslation:
+                  hasTranslation || translationState is TranslationComplete,
               bilingual: _bilingual,
               onBilingualChanged: (v) {
                 setState(() => _bilingual = v);
                 widget.settingsService.setBilingual(v);
               },
               onExportOriginal: segments != null
-                  ? () => _exportSrt(context, segments, false, false)
+                  ? () => _exportSrt(
+                      context,
+                      segments!.cast<dynamic>(),
+                      false,
+                      false,
+                    )
                   : null,
-              onExportTranslated: translationState is TranslationComplete
-                  ? () => _exportSrt(context, segments!, true, false)
+              onExportTranslated: hasTranslation && segments != null
+                  ? () => _exportSrt(
+                      context,
+                      segments!.cast<dynamic>(),
+                      true,
+                      false,
+                    )
                   : null,
-              onExportBilingual: translationState is TranslationComplete
-                  ? () => _exportSrt(context, segments!, false, true)
+              onExportBilingual: hasTranslation && segments != null
+                  ? () => _exportSrt(
+                      context,
+                      segments!.cast<dynamic>(),
+                      false,
+                      true,
+                    )
                   : null,
             );
           },
@@ -497,6 +595,197 @@ class _HomePageState extends State<HomePage> {
       builder: (_) => SettingsDialog(
         currentLocale: locale,
         onLocaleChanged: widget.onLocaleChanged,
+      ),
+    );
+  }
+
+  Widget _buildEmbeddedProjectList() {
+    return Container(
+      height: 220, // Match typical VideoPickerCard height
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(
+              children: [
+                const Icon(Icons.history_rounded, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  '最近项目',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () => _openProjects(context),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 0,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('查看全部', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: BlocBuilder<ProjectBloc, ProjectState>(
+              builder: (context, state) {
+                if (state is ProjectLoading) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (state is ProjectLoaded) {
+                  final projects = state.projects;
+                  if (projects.isEmpty) {
+                    return Center(
+                      child: Text(
+                        '暂无历史项目',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.5),
+                          fontSize: 13,
+                        ),
+                      ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: projects.length > 5
+                        ? 5
+                        : projects.length, // Show top 5
+                    itemBuilder: (context, index) {
+                      final project = projects[index];
+                      final isSelected = _activeProject?.id == project.id;
+
+                      final total = project.transcription.segments.length;
+                      final translated = project.transcription.segments
+                          .where((s) => s.translatedText?.isNotEmpty == true)
+                          .length;
+
+                      return Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => _loadProject(project),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? Theme.of(
+                                      context,
+                                    ).colorScheme.primary.withValues(alpha: 0.1)
+                                  : null,
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: Colors.white.withValues(alpha: 0.05),
+                                ),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        project.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: isSelected
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                          color: isSelected
+                                              ? Theme.of(
+                                                  context,
+                                                ).colorScheme.primary
+                                              : null,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '进度: $translated / $total',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.white.withValues(
+                                            alpha: 0.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (isSelected)
+                                  Icon(
+                                    Icons.check_circle_rounded,
+                                    size: 16,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openProjects(BuildContext context) async {
+    final selectedProject = await Navigator.push<Project>(
+      context,
+      MaterialPageRoute(builder: (_) => const ProjectListPage()),
+    );
+    if (selectedProject != null) {
+      _loadProject(selectedProject);
+    }
+  }
+
+  void _loadProject(Project project) {
+    setState(() {
+      _activeProject = project;
+      if (project.translationConfig != null) {
+        _targetLanguage = project.translationConfig!.targetLanguage;
+        // Restore other config if needed
+        if (project.translationConfig!.model != null) {
+          _targetModel = project.translationConfig!.model!;
+        }
+      }
+    });
+
+    // Clear translation bloc to ready it for continuation
+    context.read<TranslationBloc>().add(const ResetTranslation());
+
+    // Resume transcription bloc by feeding raw result immediately
+    context.read<TranscriptionBloc>().add(
+      LoadTranscriptionFromProject(
+        videoPath: project.videoPath,
+        fileName: project.name,
+        result: project.transcription,
       ),
     );
   }

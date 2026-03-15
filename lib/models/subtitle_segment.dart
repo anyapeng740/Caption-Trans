@@ -32,6 +32,26 @@ class SubtitleSegment extends Equatable {
     );
   }
 
+  factory SubtitleSegment.fromJson(Map<String, dynamic> json) {
+    return SubtitleSegment(
+      index: json['index'] as int,
+      startTime: Duration(milliseconds: json['startTimeMs'] as int),
+      endTime: Duration(milliseconds: json['endTimeMs'] as int),
+      text: json['text'] as String,
+      translatedText: json['translatedText'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'index': index,
+      'startTimeMs': startTime.inMilliseconds,
+      'endTimeMs': endTime.inMilliseconds,
+      'text': text,
+      'translatedText': translatedText,
+    };
+  }
+
   @override
   List<Object?> get props => [index, startTime, endTime, text, translatedText];
 

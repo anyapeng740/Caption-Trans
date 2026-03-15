@@ -20,17 +20,19 @@ class TranslationInProgress extends TranslationState {
   final int completed;
   final int total;
   final String statusMessage;
+  final List<SubtitleSegment>? partialSegments;
 
   const TranslationInProgress({
     required this.completed,
     required this.total,
     this.statusMessage = 'Translating...',
+    this.partialSegments,
   });
 
   double get progress => total > 0 ? completed / total : 0;
 
   @override
-  List<Object?> get props => [completed, total, statusMessage];
+  List<Object?> get props => [completed, total, statusMessage, partialSegments];
 }
 
 /// Translation completed successfully.

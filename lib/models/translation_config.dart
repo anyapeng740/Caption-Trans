@@ -48,6 +48,32 @@ class TranslationConfig extends Equatable {
     );
   }
 
+  factory TranslationConfig.fromJson(Map<String, dynamic> json) {
+    return TranslationConfig(
+      providerId: json['providerId'] as String,
+      apiKey: json['apiKey'] as String,
+      baseUrl: json['baseUrl'] as String,
+      model: json['model'] as String?,
+      sourceLanguage: json['sourceLanguage'] as String,
+      targetLanguage: json['targetLanguage'] as String,
+      batchSize: json['batchSize'] as int? ?? 25,
+      contextOverlap: json['contextOverlap'] as int? ?? 3,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'providerId': providerId,
+      'apiKey': apiKey,
+      'baseUrl': baseUrl,
+      'model': model,
+      'sourceLanguage': sourceLanguage,
+      'targetLanguage': targetLanguage,
+      'batchSize': batchSize,
+      'contextOverlap': contextOverlap,
+    };
+  }
+
   @override
   List<Object?> get props => [
         providerId,

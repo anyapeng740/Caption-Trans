@@ -18,6 +18,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
     on<SelectVideo>(_onSelectVideo);
     on<StartTranscription>(_onStartTranscription);
     on<ResetTranscription>(_onReset);
+    on<LoadTranscriptionFromProject>(_onLoadTranscriptionFromProject);
   }
 
   void _onSelectVideo(
@@ -93,6 +94,17 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
     Emitter<TranscriptionState> emit,
   ) {
     emit(const TranscriptionInitial());
+  }
+
+  void _onLoadTranscriptionFromProject(
+    LoadTranscriptionFromProject event,
+    Emitter<TranscriptionState> emit,
+  ) {
+    emit(TranscriptionComplete(
+      videoPath: event.videoPath,
+      fileName: event.fileName,
+      result: event.result,
+    ));
   }
 
   String? get _currentVideoPath {

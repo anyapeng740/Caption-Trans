@@ -37,7 +37,7 @@ class TranslationService {
   Future<List<SubtitleSegment>> translateAll({
     required List<SubtitleSegment> segments,
     required TranslationConfig config,
-    void Function(int completed, int total)? onProgress,
+    void Function(int completed, int total, List<SubtitleSegment> partials)? onProgress,
   }) async {
     if (_provider == null) {
       throw StateError('Translation provider not configured. Call configure() first.');
@@ -53,7 +53,7 @@ class TranslationService {
     final totalSegments = segments.length;
 
     // Step 1: Build context summary for global understanding
-    onProgress?.call(0, totalSegments);
+    onProgress?.call(0, totalSegments, segments);
     _contextSummary = await _provider!.buildContextSummary(
       allTexts: allTexts,
       sourceLanguage: config.sourceLanguage,
@@ -62,14 +62,27 @@ class TranslationService {
     );
 
     // Step 2: Translate in batches with sliding context window
-    final translatedTexts = List<String>.filled(totalSegments, '');
-    var completedCount = 0;
+    final translatedTexts = segments.map((s) => s.translatedText ?? '').toList();
+    var completedCount = translatedTexts.where((t) => t.isNotEmpty).length;
 
     for (var batchStart = 0;
         batchStart < totalSegments;
         batchStart += config.batchSize) {
       final batchEnd = (batchStart + config.batchSize).clamp(0, totalSegments);
       final batchTexts = allTexts.sublist(batchStart, batchEnd);
+
+      // Check if this batch is already translated
+      bool needsTranslation = false;
+      for (var i = batchStart; i < batchEnd; i++) {
+        if (translatedTexts[i].isEmpty) {
+          needsTranslation = true;
+          break;
+        }
+      }
+
+      if (!needsTranslation) {
+        continue; // Skip this batch, it's already translated
+      }
 
       // Context before: last N translated lines from previous batch
       final contextBeforeStart =
@@ -96,12 +109,25 @@ class TranslationService {
       );
 
       // Store results
+      int newlyCompleted = 0;
       for (var i = 0; i < batchResults.length; i++) {
+        if (translatedTexts[batchStart + i].isEmpty && batchResults[i].isNotEmpty) {
+          newlyCompleted++;
+        }
         translatedTexts[batchStart + i] = batchResults[i];
       }
 
-      completedCount += batchTexts.length;
-      onProgress?.call(completedCount, totalSegments);
+      completedCount += newlyCompleted;
+      
+      final partialSegments = segments
+          .asMap()
+          .entries
+          .map((e) => e.value.copyWith(
+                translatedText: translatedTexts[e.key].isEmpty ? null : translatedTexts[e.key],
+              ))
+          .toList();
+
+      onProgress?.call(completedCount, totalSegments, partialSegments);
 
       // Extract key terms from first batch for glossary
       if (batchStart == 0) {
@@ -113,7 +139,9 @@ class TranslationService {
     return segments
         .asMap()
         .entries
-        .map((e) => e.value.copyWith(translatedText: translatedTexts[e.key]))
+        .map((e) => e.value.copyWith(
+              translatedText: translatedTexts[e.key].isEmpty ? null : translatedTexts[e.key],
+            ))
         .toList();
   }
 
