@@ -79,9 +79,17 @@ jobs:
         shell: pwsh
         run: |
           $APP_NAME = "caption_trans"
-          $RELEASE_DIR = "build/windows/x64/runner/Release"
+          $RELEASE_DIR = "build\windows\x64\runner\Release"
           $ZIP_NAME = "${APP_NAME}-windows-x64.zip"
-          Compress-Archive -Path "$RELEASE_DIR/*" -DestinationPath "$ZIP_NAME"
+          
+          # Verify directory exists
+          if (!(Test-Path $RELEASE_DIR)) {
+            Write-Error "Release directory not found: $RELEASE_DIR"
+            exit 1
+          }
+          
+          # Package using relative path to avoid prefix issues
+          Compress-Archive -Path "$RELEASE_DIR\*" -DestinationPath "$ZIP_NAME" -Force
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
