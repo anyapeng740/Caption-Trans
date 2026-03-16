@@ -28,7 +28,7 @@ Please go to [Releases](https://github.com/cddqssc/Caption-Trans/releases) to do
 <img src="screenshots/screenshot_en.jpg" alt="App Screenshot" width="500">
 
 # Tips
-Currently, only the Gemini API has been tested. **gemini-2.5-flash-lite** is recommended.
+I have currently tested the Gemini API, Qwen, and SiliconFlow, and I recommend using **gemini-2.5-flash-lite**.
 
 It balances speed and quality, and the price is relatively low. It can also translate sensitive content.
 

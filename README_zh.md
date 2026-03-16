@@ -28,7 +28,7 @@
 <img src="screenshots/screenshot_zh.jpg" alt="应用截图" width="500">
 
 # 使用心得
-目前仅测试了 gemini api，推荐使用**gemini-2.5-flash-lite**。
+目前测试了 gemini api, Qwen, SiliconFlow，推荐使用**gemini-2.5-flash-lite**。
 
 它能兼顾速度和质量，价格也比较便宜。并且能翻译敏感内容。
 
