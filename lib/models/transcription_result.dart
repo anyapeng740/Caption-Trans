@@ -12,21 +12,33 @@ class TranscriptionResult extends Equatable {
   /// All subtitle segments with timestamps.
   final List<SubtitleSegment> segments;
 
+  /// Whether GPU acceleration was used.
+  final bool? isGpu;
+
+  /// Time taken for transcription in milliseconds.
+  final int? timingMs;
+
   const TranscriptionResult({
     required this.language,
     required this.duration,
     required this.segments,
+    this.isGpu,
+    this.timingMs,
   });
 
   TranscriptionResult copyWith({
     String? language,
     Duration? duration,
     List<SubtitleSegment>? segments,
+    bool? isGpu,
+    int? timingMs,
   }) {
     return TranscriptionResult(
       language: language ?? this.language,
       duration: duration ?? this.duration,
       segments: segments ?? this.segments,
+      isGpu: isGpu ?? this.isGpu,
+      timingMs: timingMs ?? this.timingMs,
     );
   }
 
@@ -37,6 +49,8 @@ class TranscriptionResult extends Equatable {
       segments: (json['segments'] as List<dynamic>)
           .map((e) => SubtitleSegment.fromJson(e as Map<String, dynamic>))
           .toList(),
+      isGpu: json['isGpu'] as bool?,
+      timingMs: json['timingMs'] as int?,
     );
   }
 
@@ -45,9 +59,11 @@ class TranscriptionResult extends Equatable {
       'language': language,
       'durationMs': duration.inMilliseconds,
       'segments': segments.map((e) => e.toJson()).toList(),
+      'isGpu': isGpu,
+      'timingMs': timingMs,
     };
   }
 
   @override
-  List<Object?> get props => [language, duration, segments];
+  List<Object?> get props => [language, duration, segments, isGpu, timingMs];
 }
