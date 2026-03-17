@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/settings_service.dart';
 import '../services/translation/translation_service.dart';
 import '../blocs/transcription/transcription_bloc.dart';
@@ -536,33 +538,60 @@ class _HomePageState extends State<HomePage> {
     bool bilingual,
   ) async {
     final l10n = AppLocalizations.of(context)!;
-    final srtContent = SrtParser.generate(
-      segments.cast(),
-      useTranslation: translatedOnly,
-      bilingual: bilingual,
-    );
+    try {
+      final srtContent = SrtParser.generate(
+        segments.cast(),
+        useTranslation: translatedOnly,
+        bilingual: bilingual,
+      );
 
-    final transcriptionState = context.read<TranscriptionBloc>().state;
-    final selectedFileName = _getFileName(transcriptionState);
-    final baseName = (selectedFileName != null && selectedFileName.isNotEmpty)
-        ? p.basenameWithoutExtension(selectedFileName)
-        : 'subtitles';
-    final exportFileName = '$baseName.srt';
+      final transcriptionState = context.read<TranscriptionBloc>().state;
+      final selectedFileName = _getFileName(transcriptionState);
+      final baseName = (selectedFileName != null && selectedFileName.isNotEmpty)
+          ? p.basenameWithoutExtension(selectedFileName)
+          : 'subtitles';
+      final exportFileName = '$baseName.srt';
 
-    final outputPath = await FilePicker.platform.saveFile(
-      dialogTitle: l10n.exportSrt,
-      fileName: exportFileName,
-      type: FileType.custom,
-      allowedExtensions: ['srt'],
-    );
+      // `saveFile` is desktop-friendly; mobile should use system share sheet.
+      if (Platform.isAndroid || Platform.isIOS) {
+        final tempDir = await getTemporaryDirectory();
+        final outputPath = p.join(tempDir.path, exportFileName);
+        await File(outputPath).writeAsString(srtContent);
 
-    if (outputPath != null) {
-      await File(outputPath).writeAsString(srtContent);
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(outputPath, mimeType: 'application/x-subrip')],
+            subject: exportFileName,
+            text: exportFileName,
+          ),
+        );
+        return;
+      }
+
+      final outputPath = await FilePicker.platform.saveFile(
+        dialogTitle: l10n.exportSrt,
+        fileName: exportFileName,
+        type: FileType.custom,
+        allowedExtensions: ['srt'],
+      );
+
+      if (outputPath != null) {
+        await File(outputPath).writeAsString(srtContent);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(l10n.exportedTo(outputPath)),
+              backgroundColor: Colors.green.shade700,
+            ),
+          );
+        }
+      }
+    } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(l10n.exportedTo(outputPath)),
-            backgroundColor: Colors.green.shade700,
+            content: Text('Export failed: $e'),
+            backgroundColor: Colors.red.shade700,
           ),
         );
       }
