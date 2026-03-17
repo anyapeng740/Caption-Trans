@@ -23,6 +23,7 @@ abstract class TranslationProvider {
   /// [sourceLanguage] / [targetLanguage] — language codes.
   /// [glossary] — key term mappings from prior batches for consistency.
   /// [onProgress] — progress callback (completed, total).
+  /// [abortTrigger] — completes to cancel any in-flight request.
   Future<List<String>> translateBatch({
     required List<String> texts,
     required String sourceLanguage,
@@ -32,6 +33,7 @@ abstract class TranslationProvider {
     List<String> contextAfter = const [],
     Map<String, String> glossary = const {},
     void Function(int completed, int total)? onProgress,
+    Future<void>? abortTrigger,
   });
 
   /// Build a summary of the full transcript for establishing global context.
@@ -43,6 +45,7 @@ abstract class TranslationProvider {
     required String sourceLanguage,
     required String targetLanguage,
     String? model,
+    Future<void>? abortTrigger,
   });
 
   /// Validate that the API key is valid and the service is reachable.
@@ -53,4 +56,13 @@ abstract class TranslationProvider {
 
   /// Release any resources held by this provider.
   void dispose();
+}
+
+/// Exception thrown when a translation is aborted by the user.
+class TranslationAbortedException implements Exception {
+  final String message;
+  const TranslationAbortedException([this.message = 'Translation cancelled']);
+
+  @override
+  String toString() => message;
 }

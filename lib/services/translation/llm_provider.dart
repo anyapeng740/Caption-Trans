@@ -35,6 +35,7 @@ class LlmProvider implements TranslationProvider {
     List<String> contextAfter = const [],
     Map<String, String> glossary = const {},
     void Function(int completed, int total)? onProgress,
+    Future<void>? abortTrigger,
   }) async {
     if (_apiKey == null) {
       throw StateError('API key not configured. Call validateApiKey first.');
@@ -52,12 +53,13 @@ class LlmProvider implements TranslationProvider {
 
     onProgress?.call(0, texts.length);
 
-    final response = await _client!.chat.completions.create(
+    final responseFuture = _client!.chat.completions.create(
       ChatCompletionCreateRequest(
         model: model ?? 'gpt-4o',
         messages: [ChatMessage.user(prompt)],
       ),
     );
+    final response = await _awaitWithAbort(responseFuture, abortTrigger);
 
     final responseText = response.text ?? '';
 
@@ -74,6 +76,7 @@ class LlmProvider implements TranslationProvider {
     required String sourceLanguage,
     required String targetLanguage,
     String? model,
+    Future<void>? abortTrigger,
   }) async {
     if (_apiKey == null) {
       throw StateError('API key not configured. Call validateApiKey first.');
@@ -111,12 +114,13 @@ Please provide:
 Keep your response concise (under 200 words).
 ''';
 
-    final response = await _client!.chat.completions.create(
+    final responseFuture = _client!.chat.completions.create(
       ChatCompletionCreateRequest(
         model: model ?? 'gpt-4o',
         messages: [ChatMessage.user(prompt)],
       ),
     );
+    final response = await _awaitWithAbort(responseFuture, abortTrigger);
     return response.text ?? '';
   }
 
@@ -278,5 +282,18 @@ Keep your response concise (under 200 words).
     return results.length > expectedCount
         ? results.sublist(0, expectedCount)
         : results;
+  }
+
+  Future<T> _awaitWithAbort<T>(
+    Future<T> future,
+    Future<void>? abortTrigger,
+  ) async {
+    if (abortTrigger == null) return await future;
+
+    final abortFuture = abortTrigger.then<T>((_) {
+      throw const TranslationAbortedException();
+    });
+
+    return await Future.any([future, abortFuture]);
   }
 }

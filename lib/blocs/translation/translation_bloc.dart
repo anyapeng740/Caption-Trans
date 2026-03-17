@@ -1,4 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../services/translation/translation_provider.dart';
 import '../../services/translation/translation_service.dart';
 import 'translation_event.dart';
 import 'translation_state.dart';
@@ -12,6 +13,7 @@ class TranslationBloc extends Bloc<TranslationEvent, TranslationState> {
   })  : _translationService = translationService ?? TranslationService(),
         super(const TranslationInitial()) {
     on<StartTranslation>(_onStartTranslation);
+    on<CancelTranslation>(_onCancelTranslation);
     on<ResetTranslation>(_onReset);
   }
 
@@ -50,8 +52,22 @@ class TranslationBloc extends Bloc<TranslationEvent, TranslationState> {
         translatedSegments: translatedSegments,
         config: event.config,
       ));
+    } on TranslationAbortedException catch (e) {
+      if (!emit.isDone) {
+        emit(TranslationCancelled(message: e.message));
+      }
     } catch (e) {
       emit(TranslationError(message: e.toString()));
+    }
+  }
+
+  void _onCancelTranslation(
+    CancelTranslation event,
+    Emitter<TranslationState> emit,
+  ) {
+    if (state is TranslationInProgress) {
+      _translationService.cancel();
+      emit(const TranslationCancelled());
     }
   }
 

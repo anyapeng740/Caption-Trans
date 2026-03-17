@@ -348,6 +348,11 @@ class _HomePageState extends State<HomePage> {
                                     );
                                   }
                                 },
+                                onCancelTranslation: () {
+                                  context.read<TranslationBloc>().add(
+                                    const CancelTranslation(),
+                                  );
+                                },
                               );
                             },
                           );

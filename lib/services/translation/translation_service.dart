@@ -1,3 +1,4 @@
+import 'dart:async';
 import '../../models/subtitle_segment.dart';
 import '../../models/translation_config.dart';
 import 'translation_provider.dart';
@@ -18,12 +19,31 @@ class TranslationService {
 
   TranslationProvider? _provider;
   String? _contextSummary;
+  Completer<void>? _abortCompleter;
+  bool _isCancelled = false;
 
   /// Get the current context summary (built during translateAll).
   String? get contextSummary => _contextSummary;
   final Map<String, String> _glossary = {};
 
   TranslationProvider? get currentProvider => _provider;
+
+  void _ensureAbortController() {
+    if (_abortCompleter != null && !_abortCompleter!.isCompleted) {
+      _abortCompleter!.complete();
+    }
+    _abortCompleter = Completer<void>();
+    _isCancelled = false;
+  }
+
+  /// Cancel any ongoing translation.
+  void cancel() {
+    _isCancelled = true;
+    if (_abortCompleter != null && !_abortCompleter!.isCompleted) {
+      _abortCompleter!.complete();
+    }
+    _provider?.dispose();
+  }
 
   /// Initialize or switch the translation provider based on config.
   void configure(TranslationConfig config) {
@@ -43,6 +63,8 @@ class TranslationService {
       throw StateError('Translation provider not configured. Call configure() first.');
     }
 
+    _ensureAbortController();
+
     // Validate API key first
     final isValid = await _provider!.validateApiKey(config.apiKey, model: config.model, baseUrl: config.baseUrl);
     if (!isValid) {
@@ -54,12 +76,23 @@ class TranslationService {
 
     // Step 1: Build context summary for global understanding
     onProgress?.call(0, totalSegments, segments);
-    _contextSummary = await _provider!.buildContextSummary(
-      allTexts: allTexts,
-      sourceLanguage: config.sourceLanguage,
-      targetLanguage: config.targetLanguage,
-      model: config.model,
-    );
+    if (_isCancelled) {
+      throw const TranslationAbortedException();
+    }
+    try {
+      _contextSummary = await _provider!.buildContextSummary(
+        allTexts: allTexts,
+        sourceLanguage: config.sourceLanguage,
+        targetLanguage: config.targetLanguage,
+        model: config.model,
+        abortTrigger: _abortCompleter?.future,
+      );
+    } catch (e) {
+      if (_isCancelled) {
+        throw const TranslationAbortedException();
+      }
+      rethrow;
+    }
 
     // Step 2: Translate in batches with sliding context window
     final translatedTexts = segments.map((s) => s.translatedText ?? '').toList();
@@ -98,15 +131,28 @@ class TranslationService {
           ? allTexts.sublist(batchEnd, contextAfterEnd)
           : <String>[];
 
-      final batchResults = await _provider!.translateBatch(
-        texts: batchTexts,
-        sourceLanguage: config.sourceLanguage,
-        targetLanguage: config.targetLanguage,
-        model: config.model,
-        contextBefore: contextBefore,
-        contextAfter: contextAfter,
-        glossary: _glossary,
-      );
+      if (_isCancelled) {
+        throw const TranslationAbortedException();
+      }
+
+      late final List<String> batchResults;
+      try {
+        batchResults = await _provider!.translateBatch(
+          texts: batchTexts,
+          sourceLanguage: config.sourceLanguage,
+          targetLanguage: config.targetLanguage,
+          model: config.model,
+          contextBefore: contextBefore,
+          contextAfter: contextAfter,
+          glossary: _glossary,
+          abortTrigger: _abortCompleter?.future,
+        );
+      } catch (e) {
+        if (_isCancelled) {
+          throw const TranslationAbortedException();
+        }
+        rethrow;
+      }
 
       // Store results
       int newlyCompleted = 0;
@@ -158,6 +204,8 @@ class TranslationService {
   void reset() {
     _contextSummary = null;
     _glossary.clear();
+    _abortCompleter = null;
+    _isCancelled = false;
   }
 
   void dispose() {

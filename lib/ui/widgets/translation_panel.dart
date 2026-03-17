@@ -39,6 +39,7 @@ class TranslationPanel extends StatelessWidget {
   final ValueChanged<int> onBatchSizeChanged;
   final VoidCallback onCheckModels;
   final VoidCallback onStartTranslation;
+  final VoidCallback onCancelTranslation;
 
   const TranslationPanel({
     super.key,
@@ -60,6 +61,7 @@ class TranslationPanel extends StatelessWidget {
     required this.onBatchSizeChanged,
     required this.onCheckModels,
     required this.onStartTranslation,
+    required this.onCancelTranslation,
   });
 
   @override
@@ -331,7 +333,8 @@ class TranslationPanel extends StatelessWidget {
             ),
             if (_isTranslating ||
                 translationState is TranslationComplete ||
-                translationState is TranslationError)
+                translationState is TranslationError ||
+                translationState is TranslationCancelled)
               Padding(
                 padding: const EdgeInsets.only(top: 20),
                 child: _buildStatusWidget(context, l10n),
@@ -352,10 +355,10 @@ class TranslationPanel extends StatelessWidget {
 
   Widget _buildStartButton(BuildContext context, AppLocalizations l10n) {
     if (_isTranslating) {
-      return const SizedBox(
-        width: 24,
-        height: 24,
-        child: CircularProgressIndicator(strokeWidth: 2),
+      return OutlinedButton.icon(
+        onPressed: onCancelTranslation,
+        icon: const Icon(Icons.stop_circle_rounded, size: 18),
+        label: Text(l10n.cancel),
       );
     }
 
@@ -437,6 +440,26 @@ class TranslationPanel extends StatelessWidget {
               s.message,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: Colors.redAccent,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (translationState is TranslationCancelled) {
+      final s = translationState as TranslationCancelled;
+      return Row(
+        children: [
+          const Icon(Icons.stop_circle_rounded, color: Colors.orangeAccent, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              s.message,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: Colors.orangeAccent,
               ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
