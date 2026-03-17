@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
 import '../services/settings_service.dart';
 import '../services/translation/translation_service.dart';
 import '../blocs/transcription/transcription_bloc.dart';
@@ -46,7 +47,7 @@ class _HomePageState extends State<HomePage> {
   String _selectedModel = AppConstants.defaultWhisperModel;
   String _targetLanguage = 'zh';
   String _apiKey = '';
-  String _targetModel = 'gemini-2.0-flash';
+  String _targetModel = 'gemini-2.5-flash-lite';
   String _llmProvider = 'Gemini (Google)';
   String _llmBaseUrl =
       'https://generativelanguage.googleapis.com/v1beta/openai';
@@ -575,13 +576,16 @@ class _HomePageState extends State<HomePage> {
       bilingual: bilingual,
     );
 
-    final suffix = bilingual
-        ? '_bilingual'
-        : (translatedOnly ? '_translated' : '_original');
+    final transcriptionState = context.read<TranscriptionBloc>().state;
+    final selectedFileName = _getFileName(transcriptionState);
+    final baseName = (selectedFileName != null && selectedFileName.isNotEmpty)
+        ? p.basenameWithoutExtension(selectedFileName)
+        : 'subtitles';
+    final exportFileName = '$baseName.srt';
 
     final outputPath = await FilePicker.platform.saveFile(
       dialogTitle: l10n.exportSrt,
-      fileName: 'subtitles$suffix.srt',
+      fileName: exportFileName,
       type: FileType.custom,
       allowedExtensions: ['srt'],
     );
