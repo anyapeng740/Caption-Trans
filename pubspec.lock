@@ -880,10 +880,10 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "649e41882878f2d04d3b087d907161fdb7a2681b"
+      resolved-ref: "4f15d7bb073d5d2b8f3954e3c091debfd2d60ba1"
       url: "https://github.com/cddqssc/whisper_ggml_plus.git"
     source: git
-    version: "1.4.1"
+    version: "1.4.2"
   win32:
     dependency: transitive
     description:

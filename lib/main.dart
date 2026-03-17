@@ -20,7 +20,7 @@ void main() async {
   // Register FFmpeg converter for automatic video/audio format conversion.
   // This uses the ffmpeg_kit library internally (no subprocess),
   // so it works within the macOS sandbox.
-  if (Platform.isMacOS) {
+  if (Platform.isMacOS || Platform.isAndroid || Platform.isIOS) {
     FFmpegMacOsConverter.register();
   } else if (Platform.isWindows) {
     FFmpegWindowsConverter.register();
