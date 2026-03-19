@@ -25,7 +25,7 @@ class WhisperService {
 
   String? _currentModel;
 
-  /// Download model/runtime resources with byte-accurate progress.
+  /// Download sidecar runtime resources with byte-accurate progress.
   ///
   /// If resources are already cached, the callback receives an immediate 100%.
   Future<void> downloadModel(
@@ -50,21 +50,16 @@ class WhisperService {
     }
   }
 
-  /// Load model into WhisperX sidecar (no progress reporting).
-  Future<void> loadModel(String modelName, {String language = 'auto'}) async {
+  /// Ensure sidecar is ready and mark the selected model for next transcription.
+  ///
+  /// WhisperX model weights are loaded lazily on the first transcribe request.
+  Future<void> loadModel(String modelName) async {
     final String? whisperxModel = modelMap[modelName];
     if (whisperxModel == null) {
       throw ArgumentError('Unknown model: $modelName');
     }
 
     await _sidecar.ensureStarted();
-    await _sidecar.prepareModel(
-      modelName: whisperxModel,
-      language: language == 'auto' ? null : language,
-      device: _defaultDevice,
-      computeType: _defaultComputeType,
-      batchSize: _defaultBatchSize,
-    );
     _currentModel = modelName;
   }
 
@@ -77,6 +72,7 @@ class WhisperService {
   Future<TranscriptionResult> transcribeWav(
     String wavPath, {
     String language = 'auto',
+    void Function(String status, String? detail)? onStatus,
     void Function(String line)? onLog,
   }) async {
     final String? selectedModel = _currentModel;
@@ -93,6 +89,7 @@ class WhisperService {
       computeType: _defaultComputeType,
       batchSize: _defaultBatchSize,
       noAlign: false,
+      onStatus: onStatus,
       onLog: onLog,
     );
     return _parseTranscriptionPayload(payload, requestedLanguage: language);

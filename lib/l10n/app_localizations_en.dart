@@ -81,20 +81,29 @@ class AppLocalizationsEn extends AppLocalizations {
   String get extract => 'Extract';
 
   @override
-  String downloadingModel(String name) {
-    return 'Downloading model $name...';
-  }
-
-  @override
-  String loadingModel(String name) {
-    return 'Loading model $name...';
-  }
+  String get preparingRuntime => 'Preparing WhisperX runtime...';
 
   @override
   String get transcodingAudio => 'Transcoding media to audio...';
 
   @override
   String get transcribingStatus => 'Transcribing...';
+
+  @override
+  String get transcriptionLoadingAudio => 'Loading audio...';
+
+  @override
+  String get transcriptionPreparingModel =>
+      'Preparing model (download on first run if needed)...';
+
+  @override
+  String get transcriptionRunning => 'Transcribing audio...';
+
+  @override
+  String get transcriptionAligning => 'Aligning timestamps...';
+
+  @override
+  String get transcriptionFinalizing => 'Finalizing transcription result...';
 
   @override
   String get extractingAudio => 'Extracting audio from video...';

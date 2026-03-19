@@ -28,6 +28,17 @@ def emit_progress(request_id: str, progress: int) -> None:
     )
 
 
+def emit_status(request_id: str, status: str, detail: Optional[str] = None) -> None:
+    payload: Dict[str, Any] = {
+        "type": "status",
+        "id": request_id,
+        "status": status,
+    }
+    if detail:
+        payload["detail"] = detail
+    emit(payload)
+
+
 def to_float(value: Any, default: float = 0.0) -> float:
     try:
         return float(value)
@@ -121,29 +132,6 @@ class WhisperXWorker:
         self.align_models[key] = (model, metadata)
         return model, metadata
 
-    def handle_prepare(self, request_id: str, params: Dict[str, Any]) -> None:
-        model_name = str(params.get("model") or "small")
-        language = params.get("language")
-        language = str(language) if language else None
-        device = str(params.get("device") or "cpu")
-        compute_type = str(params.get("compute_type") or "int8")
-
-        emit_progress(request_id, 10)
-        self.get_model(
-            model_name=model_name,
-            device=device,
-            compute_type=compute_type,
-            language=language,
-        )
-        emit_progress(request_id, 100)
-        emit(
-            {
-                "type": "result",
-                "id": request_id,
-                "payload": {"ok": True},
-            }
-        )
-
     def handle_transcribe(self, request_id: str, params: Dict[str, Any]) -> None:
         wav_path = str(params.get("wav_path") or "")
         if not wav_path:
@@ -157,9 +145,11 @@ class WhisperXWorker:
         batch_size = int(params.get("batch_size") or 4)
         no_align = bool(params.get("no_align") or False)
 
+        emit_status(request_id, "loading_audio")
         emit_progress(request_id, 8)
         audio = load_wav_pcm_s16le(wav_path)
 
+        emit_status(request_id, "preparing_model")
         emit_progress(request_id, 20)
         model = self.get_model(
             model_name=model_name,
@@ -168,6 +158,7 @@ class WhisperXWorker:
             language=language,
         )
 
+        emit_status(request_id, "transcribing")
         emit_progress(request_id, 35)
         result = model.transcribe(
             audio,
@@ -180,6 +171,7 @@ class WhisperXWorker:
         normalized_segments = normalize_segments(result.get("segments"))
 
         if not no_align and normalized_segments:
+            emit_status(request_id, "aligning")
             emit_progress(request_id, 72)
             align_model, align_metadata = self.get_align_model(detected_language, device)
             aligned = whisperx.align(
@@ -194,6 +186,7 @@ class WhisperXWorker:
             detected_language = str(aligned.get("language") or detected_language)
             normalized_segments = normalize_segments(aligned.get("segments"))
 
+        emit_status(request_id, "finalizing")
         emit_progress(request_id, 96)
         payload = {
             "language": detected_language,
@@ -217,10 +210,6 @@ class WhisperXWorker:
             params = {}
 
         if not request_id:
-            return
-
-        if method == "prepare":
-            self.handle_prepare(request_id, params)
             return
 
         if method == "transcribe":

@@ -242,17 +242,11 @@ abstract class AppLocalizations {
   /// **'Extract'**
   String get extract;
 
-  /// No description provided for @downloadingModel.
+  /// No description provided for @preparingRuntime.
   ///
   /// In en, this message translates to:
-  /// **'Downloading model {name}...'**
-  String downloadingModel(String name);
-
-  /// No description provided for @loadingModel.
-  ///
-  /// In en, this message translates to:
-  /// **'Loading model {name}...'**
-  String loadingModel(String name);
+  /// **'Preparing WhisperX runtime...'**
+  String get preparingRuntime;
 
   /// No description provided for @transcodingAudio.
   ///
@@ -265,6 +259,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Transcribing...'**
   String get transcribingStatus;
+
+  /// No description provided for @transcriptionLoadingAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading audio...'**
+  String get transcriptionLoadingAudio;
+
+  /// No description provided for @transcriptionPreparingModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing model (download on first run if needed)...'**
+  String get transcriptionPreparingModel;
+
+  /// No description provided for @transcriptionRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing audio...'**
+  String get transcriptionRunning;
+
+  /// No description provided for @transcriptionAligning.
+  ///
+  /// In en, this message translates to:
+  /// **'Aligning timestamps...'**
+  String get transcriptionAligning;
+
+  /// No description provided for @transcriptionFinalizing.
+  ///
+  /// In en, this message translates to:
+  /// **'Finalizing transcription result...'**
+  String get transcriptionFinalizing;
 
   /// No description provided for @extractingAudio.
   ///

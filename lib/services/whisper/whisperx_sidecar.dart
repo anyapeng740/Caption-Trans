@@ -10,9 +10,15 @@ import 'whisperx_runtime.dart';
 class _PendingRequest {
   final Completer<Map<String, dynamic>> completer;
   final void Function(int progress)? onProgress;
+  final void Function(String status, String? detail)? onStatus;
   final void Function(String line)? onLog;
 
-  const _PendingRequest({required this.completer, this.onProgress, this.onLog});
+  const _PendingRequest({
+    required this.completer,
+    this.onProgress,
+    this.onStatus,
+    this.onLog,
+  });
 }
 
 /// Long-running local WhisperX process, communicating via JSON lines (stdio).
@@ -145,6 +151,15 @@ class WhisperXSidecar {
       return;
     }
 
+    if (type == 'status') {
+      final String status = (message['status'] as String?) ?? '';
+      if (status.isNotEmpty) {
+        final String? detail = message['detail'] as String?;
+        pending.onStatus?.call(status, detail);
+      }
+      return;
+    }
+
     _pending.remove(id);
     if (_activeRequestForLogs == id) {
       _activeRequestForLogs = null;
@@ -171,27 +186,6 @@ class WhisperXSidecar {
     }
   }
 
-  Future<void> prepareModel({
-    required String modelName,
-    required String? language,
-    required String device,
-    required String computeType,
-    required int batchSize,
-    void Function(int progress)? onProgress,
-  }) async {
-    await _sendRequest(
-      method: 'prepare',
-      params: {
-        'model': modelName,
-        'language': language,
-        'device': device,
-        'compute_type': computeType,
-        'batch_size': batchSize,
-      },
-      onProgress: onProgress,
-    );
-  }
-
   Future<Map<String, dynamic>> transcribe({
     required String wavPath,
     required String modelName,
@@ -201,6 +195,7 @@ class WhisperXSidecar {
     required int batchSize,
     required bool noAlign,
     void Function(int progress)? onProgress,
+    void Function(String status, String? detail)? onStatus,
     void Function(String line)? onLog,
   }) {
     return _sendRequest(
@@ -215,6 +210,7 @@ class WhisperXSidecar {
         'no_align': noAlign,
       },
       onProgress: onProgress,
+      onStatus: onStatus,
       onLog: onLog,
     );
   }
@@ -223,6 +219,7 @@ class WhisperXSidecar {
     required String method,
     required Map<String, dynamic> params,
     void Function(int progress)? onProgress,
+    void Function(String status, String? detail)? onStatus,
     void Function(String line)? onLog,
   }) async {
     await ensureStarted();
@@ -237,6 +234,7 @@ class WhisperXSidecar {
     _pending[id] = _PendingRequest(
       completer: completer,
       onProgress: onProgress,
+      onStatus: onStatus,
       onLog: onLog,
     );
     _activeRequestForLogs = id;

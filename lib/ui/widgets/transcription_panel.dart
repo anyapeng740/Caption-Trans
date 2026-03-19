@@ -93,8 +93,7 @@ class TranscriptionPanel extends StatelessWidget {
   }
 
   bool get _isProcessing =>
-      state is ModelDownloading ||
-      state is ModelLoading ||
+      state is RuntimePreparing ||
       state is AudioTranscoding ||
       state is Transcribing;
 
@@ -121,24 +120,14 @@ class TranscriptionPanel extends StatelessWidget {
   Widget _buildStatusWidget(BuildContext context, AppLocalizations l10n) {
     final theme = Theme.of(context);
 
-    if (state is ModelDownloading) {
-      final s = state as ModelDownloading;
+    if (state is RuntimePreparing) {
+      final s = state as RuntimePreparing;
       return _buildProgressRow(
         context,
         icon: Icons.download_rounded,
-        label: l10n.downloadingModel(s.modelName),
+        label: l10n.preparingRuntime,
         progress: s.progress >= 0 ? s.progress : null,
         color: Colors.blue,
-      );
-    }
-
-    if (state is ModelLoading) {
-      final s = state as ModelLoading;
-      return _buildStatusRow(
-        context,
-        icon: Icons.memory_rounded,
-        label: l10n.loadingModel(s.modelName),
-        color: Colors.tealAccent,
       );
     }
 
@@ -153,9 +142,15 @@ class TranscriptionPanel extends StatelessWidget {
 
     if (state is Transcribing) {
       final s = state as Transcribing;
-      final String label = s.statusMessage.trim().isNotEmpty
-          ? s.statusMessage
-          : l10n.transcribingStatus;
+      final String base = switch (s.phase) {
+        TranscribingPhase.loadingAudio => l10n.transcriptionLoadingAudio,
+        TranscribingPhase.preparingModel => l10n.transcriptionPreparingModel,
+        TranscribingPhase.transcribing => l10n.transcriptionRunning,
+        TranscribingPhase.aligning => l10n.transcriptionAligning,
+        TranscribingPhase.finalizing => l10n.transcriptionFinalizing,
+      };
+      final String detail = (s.statusDetail ?? '').trim();
+      final String label = detail.isEmpty ? base : '$base\n$detail';
       return _buildStatusRow(
         context,
         icon: Icons.mic_rounded,

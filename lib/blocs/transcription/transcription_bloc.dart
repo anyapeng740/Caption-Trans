@@ -37,69 +37,77 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
 
     String wavPath = videoPath;
     try {
-      // 1) Download runtime/model resources (accurate byte progress)
+      // 1) Prepare runtime resources (accurate byte progress)
       emit(
-        ModelDownloading(
-          videoPath: videoPath,
-          fileName: fileName,
-          modelName: event.modelName,
-          progress: 0,
-        ),
+        RuntimePreparing(videoPath: videoPath, fileName: fileName, progress: 0),
       );
       await _whisperService.downloadModel(
         event.modelName,
         onDownloadProgress: (received, total) {
           if (emit.isDone) return;
           emit(
-            ModelDownloading(
+            RuntimePreparing(
               videoPath: videoPath,
               fileName: fileName,
-              modelName: event.modelName,
               progress: total > 0 ? received / total : 0,
             ),
           );
         },
       );
 
-      // 2) Load model (no progress)
-      emit(
-        ModelLoading(
-          videoPath: videoPath,
-          fileName: fileName,
-          modelName: event.modelName,
-        ),
-      );
-      await _whisperService.loadModel(
-        event.modelName,
-        language: event.language ?? 'auto',
-      );
+      // 2) Select model for this run (actual model load happens in transcribe).
+      await _whisperService.loadModel(event.modelName);
 
       // 3) Transcode media to WAV (no progress)
       emit(AudioTranscoding(videoPath: videoPath, fileName: fileName));
       wavPath = await _whisperService.transcodeToWav(videoPath);
 
-      // 4) Transcribe (no fake progress, optionally surface logs)
+      // 4) Transcribe with explicit sidecar phases + runtime logs.
+      TranscribingPhase currentPhase = TranscribingPhase.preparingModel;
+      String? currentDetail;
+      void emitTranscribingState({
+        required TranscribingPhase phase,
+        String? detail,
+      }) {
+        final String? normalized = detail == null
+            ? null
+            : _normalizeLogLine(detail);
+        if (currentPhase == phase && currentDetail == normalized) {
+          return;
+        }
+        currentPhase = phase;
+        currentDetail = normalized;
+        if (emit.isDone) return;
+        emit(
+          Transcribing(
+            videoPath: videoPath,
+            fileName: fileName,
+            phase: phase,
+            statusDetail: normalized,
+          ),
+        );
+      }
+
       emit(
         Transcribing(
           videoPath: videoPath,
           fileName: fileName,
-          statusMessage: 'Transcribing...',
+          phase: currentPhase,
         ),
       );
       final result = await _whisperService.transcribeWav(
         wavPath,
         language: event.language ?? 'auto',
+        onStatus: (status, detail) {
+          final TranscribingPhase phase = _phaseFromWorkerStatus(status);
+          emitTranscribingState(phase: phase, detail: detail);
+        },
         onLog: (line) {
-          if (emit.isDone) return;
-          final normalized = _normalizeLogLine(line);
+          final String? normalized = _normalizeLogLine(line);
           if (normalized == null) return;
-          emit(
-            Transcribing(
-              videoPath: videoPath,
-              fileName: fileName,
-              statusMessage: normalized,
-            ),
-          );
+          final TranscribingPhase phase =
+              _phaseFromLogLine(normalized) ?? currentPhase;
+          emitTranscribingState(phase: phase, detail: normalized);
         },
       );
 
@@ -133,6 +141,43 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
     return trimmed.length > 140 ? '${trimmed.substring(0, 140)}...' : trimmed;
   }
 
+  TranscribingPhase _phaseFromWorkerStatus(String status) {
+    switch (status) {
+      case 'loading_audio':
+        return TranscribingPhase.loadingAudio;
+      case 'preparing_model':
+        return TranscribingPhase.preparingModel;
+      case 'transcribing':
+        return TranscribingPhase.transcribing;
+      case 'aligning':
+        return TranscribingPhase.aligning;
+      case 'finalizing':
+        return TranscribingPhase.finalizing;
+      default:
+        return TranscribingPhase.transcribing;
+    }
+  }
+
+  TranscribingPhase? _phaseFromLogLine(String line) {
+    final String lower = line.toLowerCase();
+    if (lower.contains('download')) {
+      return TranscribingPhase.preparingModel;
+    }
+    if (lower.contains('align')) {
+      return TranscribingPhase.aligning;
+    }
+    if (lower.contains('transcrib')) {
+      return TranscribingPhase.transcribing;
+    }
+    if (lower.contains('model') || lower.contains('loading')) {
+      return TranscribingPhase.preparingModel;
+    }
+    if (lower.contains('audio') || lower.contains('wav')) {
+      return TranscribingPhase.loadingAudio;
+    }
+    return null;
+  }
+
   void _onReset(ResetTranscription event, Emitter<TranscriptionState> emit) {
     emit(const TranscriptionInitial());
   }
@@ -153,8 +198,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
   String? get _currentVideoPath {
     final s = state;
     if (s is VideoSelected) return s.videoPath;
-    if (s is ModelDownloading) return s.videoPath;
-    if (s is ModelLoading) return s.videoPath;
+    if (s is RuntimePreparing) return s.videoPath;
     if (s is AudioTranscoding) return s.videoPath;
     if (s is Transcribing) return s.videoPath;
     if (s is TranscriptionComplete) return s.videoPath;
@@ -165,8 +209,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
   String? get _currentFileName {
     final s = state;
     if (s is VideoSelected) return s.fileName;
-    if (s is ModelDownloading) return s.fileName;
-    if (s is ModelLoading) return s.fileName;
+    if (s is RuntimePreparing) return s.fileName;
     if (s is AudioTranscoding) return s.fileName;
     if (s is Transcribing) return s.fileName;
     if (s is TranscriptionComplete) return s.fileName;

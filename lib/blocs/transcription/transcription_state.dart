@@ -25,38 +25,20 @@ class VideoSelected extends TranscriptionState {
   List<Object?> get props => [videoPath, fileName];
 }
 
-/// Model/runtime assets are being downloaded.
-class ModelDownloading extends TranscriptionState {
+/// Sidecar runtime assets are being prepared/downloaded.
+class RuntimePreparing extends TranscriptionState {
   final String videoPath;
   final String fileName;
-  final String modelName;
   final double progress;
 
-  const ModelDownloading({
+  const RuntimePreparing({
     required this.videoPath,
     required this.fileName,
-    required this.modelName,
     required this.progress,
   });
 
   @override
-  List<Object?> get props => [videoPath, fileName, modelName, progress];
-}
-
-/// Model is being loaded into WhisperX runtime.
-class ModelLoading extends TranscriptionState {
-  final String videoPath;
-  final String fileName;
-  final String modelName;
-
-  const ModelLoading({
-    required this.videoPath,
-    required this.fileName,
-    required this.modelName,
-  });
-
-  @override
-  List<Object?> get props => [videoPath, fileName, modelName];
+  List<Object?> get props => [videoPath, fileName, progress];
 }
 
 /// Media is being transcoded to WAV.
@@ -71,19 +53,29 @@ class AudioTranscoding extends TranscriptionState {
 }
 
 /// WhisperX is transcribing.
+enum TranscribingPhase {
+  loadingAudio,
+  preparingModel,
+  transcribing,
+  aligning,
+  finalizing,
+}
+
 class Transcribing extends TranscriptionState {
   final String videoPath;
   final String fileName;
-  final String statusMessage;
+  final TranscribingPhase phase;
+  final String? statusDetail;
 
   const Transcribing({
     required this.videoPath,
     required this.fileName,
-    this.statusMessage = 'Transcribing...',
+    this.phase = TranscribingPhase.transcribing,
+    this.statusDetail,
   });
 
   @override
-  List<Object?> get props => [videoPath, fileName, statusMessage];
+  List<Object?> get props => [videoPath, fileName, phase, statusDetail];
 }
 
 /// Transcription completed successfully.

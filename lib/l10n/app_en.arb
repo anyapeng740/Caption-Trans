@@ -24,24 +24,14 @@
   "qualitySuperior": "Superior (Recommended)",
   "qualityBest": "Best",
   "extract": "Extract",
-  "downloadingModel": "Downloading model {name}...",
-  "@downloadingModel": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "loadingModel": "Loading model {name}...",
-  "@loadingModel": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
+  "preparingRuntime": "Preparing WhisperX runtime...",
   "transcodingAudio": "Transcoding media to audio...",
   "transcribingStatus": "Transcribing...",
+  "transcriptionLoadingAudio": "Loading audio...",
+  "transcriptionPreparingModel": "Preparing model (download on first run if needed)...",
+  "transcriptionRunning": "Transcribing audio...",
+  "transcriptionAligning": "Aligning timestamps...",
+  "transcriptionFinalizing": "Finalizing transcription result...",
   "extractingAudio": "Extracting audio from video...",
   "processingTranscription": "Transcription in progress...",
   "preprocessingStatus": "Preprocessing: Transcoding and silence detection...",

@@ -81,20 +81,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get extract => '提取';
 
   @override
-  String downloadingModel(String name) {
-    return '正在下载模型 $name...';
-  }
-
-  @override
-  String loadingModel(String name) {
-    return '正在加载模型 $name...';
-  }
+  String get preparingRuntime => '正在准备 WhisperX 运行时...';
 
   @override
   String get transcodingAudio => '正在将媒体转码为音频...';
 
   @override
   String get transcribingStatus => '正在转录...';
+
+  @override
+  String get transcriptionLoadingAudio => '正在加载音频...';
+
+  @override
+  String get transcriptionPreparingModel => '正在准备模型（首次运行若无缓存会下载）...';
+
+  @override
+  String get transcriptionRunning => '正在转录音频...';
+
+  @override
+  String get transcriptionAligning => '正在对齐时间戳...';
+
+  @override
+  String get transcriptionFinalizing => '正在整理转录结果...';
 
   @override
   String get extractingAudio => '正在从视频中提取音频...';
