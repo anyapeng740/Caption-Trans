@@ -1,7 +1,3 @@
-import 'dart:io';
-
-import 'package:caption_trans/converter/ffmpeg_macos.dart';
-import 'package:caption_trans/converter/ffmpeg_windows.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -16,15 +12,6 @@ import 'ui/home_page.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final settingsService = await SettingsService.init();
-
-  // Register FFmpeg converter for automatic video/audio format conversion.
-  // This uses the ffmpeg_kit library internally (no subprocess),
-  // so it works within the macOS sandbox.
-  if (Platform.isMacOS || Platform.isAndroid || Platform.isIOS) {
-    FFmpegMacOsConverter.register();
-  } else if (Platform.isWindows) {
-    FFmpegWindowsConverter.register();
-  }
 
   runApp(CaptionTransApp(settingsService: settingsService));
 }

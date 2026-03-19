@@ -12,11 +12,6 @@ PODS:
   - shared_preferences_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
-  - whisper_ggml_plus (1.3.1):
-    - FlutterMacOS
-    - whisper_ggml_plus/no-arc (= 1.3.1)
-  - whisper_ggml_plus/no-arc (1.3.1):
-    - FlutterMacOS
 
 DEPENDENCIES:
   - ffmpeg_kit_flutter_new_min (from `Flutter/ephemeral/.symlinks/plugins/ffmpeg_kit_flutter_new_min/macos`)
@@ -24,7 +19,6 @@ DEPENDENCIES:
   - FlutterMacOS (from `Flutter/ephemeral`)
   - share_plus (from `Flutter/ephemeral/.symlinks/plugins/share_plus/macos`)
   - shared_preferences_foundation (from `Flutter/ephemeral/.symlinks/plugins/shared_preferences_foundation/darwin`)
-  - whisper_ggml_plus (from `Flutter/ephemeral/.symlinks/plugins/whisper_ggml_plus/macos`)
 
 EXTERNAL SOURCES:
   ffmpeg_kit_flutter_new_min:
@@ -37,8 +31,6 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/share_plus/macos
   shared_preferences_foundation:
     :path: Flutter/ephemeral/.symlinks/plugins/shared_preferences_foundation/darwin
-  whisper_ggml_plus:
-    :path: Flutter/ephemeral/.symlinks/plugins/whisper_ggml_plus/macos
 
 SPEC CHECKSUMS:
   ffmpeg_kit_flutter_new_min: 623d95fe4c00311175a10f9ab3efa312c266ead6
@@ -46,7 +38,6 @@ SPEC CHECKSUMS:
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
   share_plus: 510bf0af1a42cd602274b4629920c9649c52f4cc
   shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
-  whisper_ggml_plus: 679c4d6243cd309dacdbb7ab4901466d3a49f51c
 
 PODFILE CHECKSUM: 54d867c82ac51cbd61b565781b9fada492027009
 

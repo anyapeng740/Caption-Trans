@@ -571,7 +571,8 @@ class _HomePageState extends State<HomePage> {
   String? _getFileName(TranscriptionState state) {
     if (state is VideoSelected) return state.fileName;
     if (state is ModelDownloading) return state.fileName;
-    if (state is AudioExtracting) return state.fileName;
+    if (state is ModelLoading) return state.fileName;
+    if (state is AudioTranscoding) return state.fileName;
     if (state is Transcribing) return state.fileName;
     if (state is TranscriptionComplete) return state.fileName;
     if (state is TranscriptionError) return state.fileName;

@@ -1,100 +1,169 @@
-import 'package:whisper_ggml_plus/whisper_ggml_plus.dart';
+import 'dart:io';
+
 import '../../models/subtitle_segment.dart';
 import '../../models/transcription_result.dart';
-import 'model_manager.dart';
+import '../audio/media_to_wav_converter.dart';
+import 'whisperx_sidecar.dart';
 
-/// Service for transcribing audio/video using Whisper (whisper.cpp via whisper_ggml_plus).
-///
-/// Requires [WhisperFFmpegConverter.register()] to be called in main() so that
-/// non-WAV files (including video files) are automatically converted.
+/// Service for transcribing media using WhisperX through a local Python sidecar.
 class WhisperService {
-  final WhisperController _controller = WhisperController();
-  final ModelManager _modelManager = ModelManager();
-  WhisperModel? _currentModel;
-
-  /// Map from string model names to WhisperModel enum values.
-  static const Map<String, WhisperModel> modelMap = {
-    'tiny': WhisperModel.tiny,
-    'base': WhisperModel.base,
-    'small': WhisperModel.small,
-    'medium': WhisperModel.medium,
-    'large-v3': WhisperModel.large,
-    'large-v3-turbo': WhisperModel.largeV3Turbo,
+  static const Map<String, String> modelMap = {
+    'tiny': 'tiny',
+    'base': 'base',
+    'small': 'small',
+    'medium': 'medium',
+    'large-v3': 'large-v3',
+    'large-v3-turbo': 'large-v3-turbo',
   };
 
-  ModelManager get modelManager => _modelManager;
+  static const String _defaultDevice = 'cpu';
+  static const String _defaultComputeType = 'int8';
+  static const int _defaultBatchSize = 4;
 
-  /// Download a Whisper model with progress reporting.
-  Future<void> loadModel(
+  final WhisperXSidecar _sidecar = WhisperXSidecar();
+  final MediaToWavConverter _wavConverter = MediaToWavConverter();
+
+  String? _currentModel;
+
+  /// Download model/runtime resources with byte-accurate progress.
+  ///
+  /// If resources are already cached, the callback receives an immediate 100%.
+  Future<void> downloadModel(
     String modelName, {
     void Function(int received, int total)? onDownloadProgress,
   }) async {
-    final model = modelMap[modelName];
-    if (model == null) {
+    final String? whisperxModel = modelMap[modelName];
+    if (whisperxModel == null) {
       throw ArgumentError('Unknown model: $modelName');
     }
 
-    // Download model with progress
-    await _modelManager.downloadModel(
-      model,
-      onProgress: onDownloadProgress,
+    bool progressUpdated = false;
+    await _sidecar.ensureStarted(
+      onRuntimeDownloadProgress: (received, total) {
+        progressUpdated = true;
+        onDownloadProgress?.call(received, total);
+      },
     );
-    _currentModel = model;
+
+    if (!progressUpdated) {
+      onDownloadProgress?.call(1, 1);
+    }
   }
 
-  /// Transcribe a media file (video or audio) and return structured results.
-  ///
-  /// The file can be any format supported by FFmpeg — the registered
-  /// WhisperFFmpegConverter automatically converts to 16kHz mono WAV.
-  Future<TranscriptionResult> transcribe(
-    String mediaPath, {
+  /// Load model into WhisperX sidecar (no progress reporting).
+  Future<void> loadModel(String modelName, {String language = 'auto'}) async {
+    final String? whisperxModel = modelMap[modelName];
+    if (whisperxModel == null) {
+      throw ArgumentError('Unknown model: $modelName');
+    }
+
+    await _sidecar.ensureStarted();
+    await _sidecar.prepareModel(
+      modelName: whisperxModel,
+      language: language == 'auto' ? null : language,
+      device: _defaultDevice,
+      computeType: _defaultComputeType,
+      batchSize: _defaultBatchSize,
+    );
+    _currentModel = modelName;
+  }
+
+  /// Convert input media into WhisperX-ready WAV.
+  Future<String> transcodeToWav(String mediaPath) {
+    return _wavConverter.ensureWhisperxWav(mediaPath);
+  }
+
+  /// Transcribe already-prepared WAV using loaded model (no fake progress).
+  Future<TranscriptionResult> transcribeWav(
+    String wavPath, {
     String language = 'auto',
-    void Function(int progress)? onProgress,
+    void Function(String line)? onLog,
   }) async {
-    if (_currentModel == null) {
+    final String? selectedModel = _currentModel;
+    if (selectedModel == null) {
       throw StateError('No model loaded. Call loadModel() first.');
     }
 
-    final result = await _controller.transcribe(
-      model: _currentModel!,
-      audioPath: mediaPath,
-      lang: language,
-      withTimestamps: true,
-      convert: true, // Auto-convert via registered FFmpeg converter
-      onProgress: onProgress,
+    final String whisperxModel = modelMap[selectedModel]!;
+    final Map<String, dynamic> payload = await _sidecar.transcribe(
+      wavPath: wavPath,
+      modelName: whisperxModel,
+      language: language == 'auto' ? null : language,
+      device: _defaultDevice,
+      computeType: _defaultComputeType,
+      batchSize: _defaultBatchSize,
+      noAlign: false,
+      onLog: onLog,
     );
+    return _parseTranscriptionPayload(payload, requestedLanguage: language);
+  }
 
-    if (result == null) {
-      throw Exception('Transcription returned null');
+  Future<void> cleanupTempWav(
+    String wavPath, {
+    required String originalMediaPath,
+  }) async {
+    if (wavPath == originalMediaPath) return;
+    final File file = File(wavPath);
+    if (await file.exists()) {
+      await file.delete();
+    }
+  }
+
+  TranscriptionResult _parseTranscriptionPayload(
+    Map<String, dynamic> payload, {
+    required String requestedLanguage,
+  }) {
+    final List<dynamic> rawSegments =
+        (payload['segments'] as List<dynamic>?) ?? [];
+    final List<SubtitleSegment> segments = <SubtitleSegment>[];
+    for (int i = 0; i < rawSegments.length; i++) {
+      final dynamic raw = rawSegments[i];
+      if (raw is! Map<String, dynamic>) {
+        continue;
+      }
+
+      final int startMs = (((raw['start'] as num?) ?? 0).toDouble() * 1000)
+          .round();
+      final int endMs = (((raw['end'] as num?) ?? 0).toDouble() * 1000).round();
+      final String text = ((raw['text'] as String?) ?? '').trim();
+      if (text.isEmpty) continue;
+
+      segments.add(
+        SubtitleSegment(
+          index: i + 1,
+          startTime: Duration(milliseconds: startMs),
+          endTime: Duration(milliseconds: endMs < startMs ? startMs : endMs),
+          text: text,
+        ),
+      );
     }
 
-    final responseSegments = result.transcription.segments ?? [];
+    final String detectedLanguage =
+        (payload['language'] as String?)?.trim().isNotEmpty == true
+        ? (payload['language'] as String)
+        : (requestedLanguage == 'auto' ? 'unknown' : requestedLanguage);
 
-    final segments = <SubtitleSegment>[];
-    for (var i = 0; i < responseSegments.length; i++) {
-      final seg = responseSegments[i];
-      segments.add(SubtitleSegment(
-        index: i + 1,
-        startTime: seg.fromTs,
-        endTime: seg.toTs,
-        text: seg.text.trim(),
-      ));
-    }
+    final Duration duration = (() {
+      final num? value = payload['duration_sec'] as num?;
+      if (value == null) {
+        if (segments.isEmpty) return Duration.zero;
+        return segments.last.endTime;
+      }
+      return Duration(milliseconds: (value.toDouble() * 1000).round());
+    })();
 
     return TranscriptionResult(
-      language: language,
-      duration: segments.isNotEmpty ? segments.last.endTime : Duration.zero,
+      language: detectedLanguage,
+      duration: duration,
       segments: segments,
     );
   }
 
   bool get isModelLoaded => _currentModel != null;
-  String? get loadedModelName => _currentModel?.modelName;
+  String? get loadedModelName => _currentModel;
 
   Future<void> dispose() async {
-    if (_currentModel != null) {
-      await _controller.dispose(model: _currentModel!);
-    }
+    await _sidecar.dispose();
     _currentModel = null;
   }
 }

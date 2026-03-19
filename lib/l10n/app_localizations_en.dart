@@ -86,6 +86,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String loadingModel(String name) {
+    return 'Loading model $name...';
+  }
+
+  @override
+  String get transcodingAudio => 'Transcoding media to audio...';
+
+  @override
+  String get transcribingStatus => 'Transcribing...';
+
+  @override
   String get extractingAudio => 'Extracting audio from video...';
 
   @override

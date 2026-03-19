@@ -32,6 +32,16 @@
       }
     }
   },
+  "loadingModel": "Loading model {name}...",
+  "@loadingModel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "transcodingAudio": "Transcoding media to audio...",
+  "transcribingStatus": "Transcribing...",
   "extractingAudio": "Extracting audio from video...",
   "processingTranscription": "Transcription in progress...",
   "preprocessingStatus": "Preprocessing: Transcoding and silence detection...",

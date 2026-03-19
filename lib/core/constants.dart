@@ -63,10 +63,6 @@ class AppConstants {
 
   static const String defaultWhisperModel = 'large-v3-turbo';
 
-  /// Hugging Face model base URL for GGML models.
-  static const String whisperModelBaseUrl =
-      'https://huggingface.co/ggerganov/whisper.cpp/resolve/main';
-
   /// Supported languages for translation target.
   static const Map<String, String> supportedLanguages = {
     'zh': '中文',

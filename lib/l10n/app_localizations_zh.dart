@@ -86,6 +86,17 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String loadingModel(String name) {
+    return '正在加载模型 $name...';
+  }
+
+  @override
+  String get transcodingAudio => '正在将媒体转码为音频...';
+
+  @override
+  String get transcribingStatus => '正在转录...';
+
+  @override
   String get extractingAudio => '正在从视频中提取音频...';
 
   @override

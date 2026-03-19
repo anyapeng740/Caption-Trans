@@ -94,7 +94,8 @@ class TranscriptionPanel extends StatelessWidget {
 
   bool get _isProcessing =>
       state is ModelDownloading ||
-      state is AudioExtracting ||
+      state is ModelLoading ||
+      state is AudioTranscoding ||
       state is Transcribing;
 
   bool get _canStart =>
@@ -131,26 +132,34 @@ class TranscriptionPanel extends StatelessWidget {
       );
     }
 
-    if (state is AudioExtracting) {
-      return _buildProgressRow(
+    if (state is ModelLoading) {
+      final s = state as ModelLoading;
+      return _buildStatusRow(
+        context,
+        icon: Icons.memory_rounded,
+        label: l10n.loadingModel(s.modelName),
+        color: Colors.tealAccent,
+      );
+    }
+
+    if (state is AudioTranscoding) {
+      return _buildStatusRow(
         context,
         icon: Icons.audio_file_rounded,
-        label: l10n.extractingAudio,
-        progress: null,
+        label: l10n.transcodingAudio,
         color: Colors.orange,
       );
     }
 
     if (state is Transcribing) {
       final s = state as Transcribing;
-      String label = s.progress > 0
-          ? l10n.processingTranscription
-          : l10n.preprocessingStatus;
-      return _buildProgressRow(
+      final String label = s.statusMessage.trim().isNotEmpty
+          ? s.statusMessage
+          : l10n.transcribingStatus;
+      return _buildStatusRow(
         context,
         icon: Icons.mic_rounded,
         label: label,
-        progress: s.progress > 0 ? s.progress / 100.0 : null,
         color: Colors.purple,
       );
     }
@@ -228,6 +237,30 @@ class TranscriptionPanel extends StatelessWidget {
             backgroundColor: Colors.white.withValues(alpha: 0.08),
             valueColor: AlwaysStoppedAnimation(color),
             minHeight: 4,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatusRow(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Colors.white.withValues(alpha: 0.8),
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],

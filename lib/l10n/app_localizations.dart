@@ -248,6 +248,24 @@ abstract class AppLocalizations {
   /// **'Downloading model {name}...'**
   String downloadingModel(String name);
 
+  /// No description provided for @loadingModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading model {name}...'**
+  String loadingModel(String name);
+
+  /// No description provided for @transcodingAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcoding media to audio...'**
+  String get transcodingAudio;
+
+  /// No description provided for @transcribingStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing...'**
+  String get transcribingStatus;
+
   /// No description provided for @extractingAudio.
   ///
   /// In en, this message translates to:
