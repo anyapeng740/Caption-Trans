@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:path/path.dart' as p;
 
+import '../../models/whisper_runtime_info.dart';
 import '../../services/whisper/whisper_service.dart';
 import 'transcription_event.dart';
 import 'transcription_state.dart';
@@ -40,20 +41,29 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
     if (videoPath == null || fileName == null) return;
 
     String wavPath = videoPath;
+    WhisperRuntimeInfo? runtimeInfo;
     try {
-      // 1) Prepare runtime resources (accurate byte progress)
+      // 1) Prepare runtime resources.
+      // Only the download phase has determinate progress; install/start phases
+      // stay in RuntimePreparing with translated status text.
       emit(
-        RuntimePreparing(videoPath: videoPath, fileName: fileName, progress: 0),
+        RuntimePreparing(
+          videoPath: videoPath,
+          fileName: fileName,
+          phase: RuntimePreparingPhase.checkingRuntime,
+        ),
       );
       await _whisperService.downloadModel(
         event.modelName,
-        onDownloadProgress: (received, total) {
+        onPreparationState: (phase, progress) {
           if (emit.isDone) return;
           emit(
             RuntimePreparing(
               videoPath: videoPath,
               fileName: fileName,
-              progress: total > 0 ? received / total : 0,
+              phase: _runtimePreparingPhaseFromCode(phase),
+              progress: progress,
+              runtimeInfo: runtimeInfo,
             ),
           );
         },
@@ -61,9 +71,18 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
 
       // 2) Select model for this run (actual model load happens in transcribe).
       await _whisperService.loadModel(event.modelName);
+      runtimeInfo = await _whisperService.inspectRuntime(
+        modelName: event.modelName,
+      );
 
       // 3) Transcode media to WAV (no progress)
-      emit(AudioTranscoding(videoPath: videoPath, fileName: fileName));
+      emit(
+        AudioTranscoding(
+          videoPath: videoPath,
+          fileName: fileName,
+          runtimeInfo: runtimeInfo,
+        ),
+      );
       wavPath = await _whisperService.transcodeToWav(videoPath);
 
       // 4) Transcribe with explicit sidecar phases + runtime logs.
@@ -72,15 +91,21 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
       void emitTranscribingState({
         required TranscribingPhase phase,
         String? detail,
+        WhisperRuntimeInfo? nextRuntimeInfo,
       }) {
         final String? normalized = detail == null
             ? null
             : _normalizeLogLine(detail);
-        if (currentPhase == phase && currentDetail == normalized) {
+        final WhisperRuntimeInfo? resolvedRuntimeInfo =
+            nextRuntimeInfo ?? runtimeInfo;
+        if (currentPhase == phase &&
+            currentDetail == normalized &&
+            runtimeInfo == resolvedRuntimeInfo) {
           return;
         }
         currentPhase = phase;
         currentDetail = normalized;
+        runtimeInfo = resolvedRuntimeInfo;
         if (emit.isDone) return;
         emit(
           Transcribing(
@@ -88,6 +113,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
             fileName: fileName,
             phase: phase,
             statusDetail: normalized,
+            runtimeInfo: runtimeInfo,
           ),
         );
       }
@@ -97,11 +123,19 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
           videoPath: videoPath,
           fileName: fileName,
           phase: currentPhase,
+          runtimeInfo: runtimeInfo,
         ),
       );
       final result = await _whisperService.transcribeWav(
         wavPath,
         language: event.language ?? 'ja',
+        onRuntimeInfo: (info) {
+          emitTranscribingState(
+            phase: currentPhase,
+            detail: currentDetail,
+            nextRuntimeInfo: info,
+          );
+        },
         onStatus: (status, detail) {
           final TranscribingPhase phase = _phaseFromWorkerStatus(status);
           emitTranscribingState(phase: phase, detail: detail);
@@ -120,6 +154,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
           videoPath: videoPath,
           fileName: fileName,
           result: result,
+          runtimeInfo: runtimeInfo,
         ),
       );
     } catch (e) {
@@ -128,6 +163,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
           videoPath: videoPath,
           fileName: fileName,
           message: e.toString(),
+          runtimeInfo: runtimeInfo,
         ),
       );
     } finally {
@@ -143,6 +179,24 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
     if (trimmed.isEmpty) return null;
     // WhisperX/PyTorch logs can be very long; keep status concise in UI.
     return trimmed.length > 140 ? '${trimmed.substring(0, 140)}...' : trimmed;
+  }
+
+  RuntimePreparingPhase _runtimePreparingPhaseFromCode(String phase) {
+    switch (phase) {
+      case 'downloading_runtime':
+        return RuntimePreparingPhase.downloadingRuntime;
+      case 'extracting_runtime':
+        return RuntimePreparingPhase.extractingRuntime;
+      case 'creating_environment':
+        return RuntimePreparingPhase.creatingEnvironment;
+      case 'installing_dependencies':
+        return RuntimePreparingPhase.installingDependencies;
+      case 'starting_sidecar':
+        return RuntimePreparingPhase.startingSidecar;
+      case 'checking_runtime':
+      default:
+        return RuntimePreparingPhase.checkingRuntime;
+    }
   }
 
   TranscribingPhase _phaseFromWorkerStatus(String status) {

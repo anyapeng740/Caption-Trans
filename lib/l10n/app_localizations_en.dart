@@ -84,6 +84,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get preparingRuntime => 'Preparing WhisperX runtime...';
 
   @override
+  String get runtimeChecking => 'Checking WhisperX runtime...';
+
+  @override
+  String get runtimeDownloading => 'Downloading runtime package...';
+
+  @override
+  String get runtimeExtracting => 'Extracting runtime package...';
+
+  @override
+  String get runtimeCreatingEnvironment => 'Creating Python environment...';
+
+  @override
+  String get runtimeInstallingDependencies =>
+      'Installing WhisperX dependencies...';
+
+  @override
+  String get runtimeStartingSidecar => 'Starting WhisperX sidecar...';
+
+  @override
   String get transcodingAudio => 'Transcoding media to audio...';
 
   @override

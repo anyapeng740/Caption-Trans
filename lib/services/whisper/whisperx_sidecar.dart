@@ -7,6 +7,68 @@ import 'package:path/path.dart' as p;
 
 import 'whisperx_runtime.dart';
 
+class WhisperXRuntimeProbe {
+  final String platform;
+  final String pythonVersion;
+  final String whisperxVersion;
+  final String? torchVersion;
+  final String? torchCudaVersion;
+  final bool cudaAvailable;
+  final int cudaDeviceCount;
+  final String? cudaDeviceName;
+  final List<String> cudaComputeTypes;
+  final String? torchError;
+  final String? ctranslate2Version;
+  final String? ctranslate2Error;
+  final String? ctranslate2CudaError;
+
+  const WhisperXRuntimeProbe({
+    required this.platform,
+    required this.pythonVersion,
+    required this.whisperxVersion,
+    required this.torchVersion,
+    required this.torchCudaVersion,
+    required this.cudaAvailable,
+    required this.cudaDeviceCount,
+    required this.cudaDeviceName,
+    required this.cudaComputeTypes,
+    required this.torchError,
+    required this.ctranslate2Version,
+    required this.ctranslate2Error,
+    required this.ctranslate2CudaError,
+  });
+
+  bool get canUseCuda =>
+      cudaAvailable && cudaDeviceCount > 0 && cudaComputeTypes.isNotEmpty;
+
+  factory WhisperXRuntimeProbe.fromPayload(Map<String, dynamic> payload) {
+    final List<String> computeTypes =
+        ((payload['cuda_compute_types'] as List<dynamic>?) ?? <dynamic>[])
+            .map((dynamic item) => item.toString().trim().toLowerCase())
+            .where((String item) => item.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+
+    return WhisperXRuntimeProbe(
+      platform: (payload['platform'] as String? ?? '').trim().toLowerCase(),
+      pythonVersion: (payload['python_version'] as String? ?? '').trim(),
+      whisperxVersion: (payload['whisperx_version'] as String? ?? '').trim(),
+      torchVersion: (payload['torch_version'] as String?)?.trim(),
+      torchCudaVersion: (payload['torch_cuda_version'] as String?)?.trim(),
+      cudaAvailable: payload['cuda_available'] == true,
+      cudaDeviceCount: (payload['cuda_device_count'] as num?)?.toInt() ?? 0,
+      cudaDeviceName: (payload['cuda_device_name'] as String?)?.trim(),
+      cudaComputeTypes: computeTypes,
+      torchError: (payload['torch_error'] as String?)?.trim(),
+      ctranslate2Version: (payload['ctranslate2_version'] as String?)?.trim(),
+      ctranslate2Error: (payload['ctranslate2_error'] as String?)?.trim(),
+      ctranslate2CudaError: (payload['ctranslate2_cuda_error'] as String?)
+          ?.trim(),
+    );
+  }
+}
+
 class _PendingRequest {
   final Completer<Map<String, dynamic>> completer;
   final void Function(int progress)? onProgress;
@@ -31,23 +93,42 @@ class WhisperXSidecar {
   Future<void>? _startFuture;
   int _requestSeq = 0;
   String? _activeRequestForLogs;
+  Future<WhisperXRuntimeProbe>? _runtimeProbeFuture;
+  String? _startedDependencyProfileId;
 
   Future<void> ensureStarted({
     void Function(int percent)? onBootstrapProgress,
     void Function(int received, int total)? onRuntimeDownloadProgress,
+    void Function(String phase)? onBootstrapStatus,
   }) async {
-    if (_process != null) {
+    final String? desiredProfileId = Platform.isWindows
+        ? await WhisperXRuntime.instance.resolveCurrentDependencyProfileId()
+        : null;
+
+    if (_process != null &&
+        (desiredProfileId == null ||
+            _startedDependencyProfileId == desiredProfileId)) {
       return;
     }
 
     if (_startFuture != null) {
       await _startFuture;
-      return;
+      if (_process != null &&
+          (desiredProfileId == null ||
+              _startedDependencyProfileId == desiredProfileId)) {
+        return;
+      }
+    }
+
+    if (_process != null) {
+      await dispose();
     }
 
     _startFuture = _doStart(
+      expectedDependencyProfileId: desiredProfileId,
       onBootstrapProgress: onBootstrapProgress,
       onRuntimeDownloadProgress: onRuntimeDownloadProgress,
+      onBootstrapStatus: onBootstrapStatus,
     );
     try {
       await _startFuture;
@@ -57,55 +138,68 @@ class WhisperXSidecar {
   }
 
   Future<void> _doStart({
+    String? expectedDependencyProfileId,
     void Function(int percent)? onBootstrapProgress,
     void Function(int received, int total)? onRuntimeDownloadProgress,
+    void Function(String phase)? onBootstrapStatus,
   }) async {
     final WhisperXRuntimeInfo info = await WhisperXRuntime.instance.ensureReady(
       onProgress: onBootstrapProgress,
       onDownloadProgress: onRuntimeDownloadProgress,
+      onStatus: onBootstrapStatus,
     );
 
     _readyCompleter = Completer<void>();
+    onBootstrapStatus?.call('starting_sidecar');
     final process = await Process.start(
       info.pythonExecutable,
       [info.workerScriptPath],
       workingDirectory: p.dirname(info.workerScriptPath),
+      environment: const <String, String>{
+        'PYTHONIOENCODING': 'utf-8',
+        'PYTHONUTF8': '1',
+      },
       runInShell: false,
     );
     _process = process;
+    _startedDependencyProfileId = expectedDependencyProfileId;
 
     _stdoutSub = process.stdout
-        .transform(utf8.decoder)
+        .transform(const Utf8Decoder(allowMalformed: true))
         .transform(const LineSplitter())
-        .listen(_handleStdoutLine);
+        .listen(
+          _handleStdoutLine,
+          onError: (Object error, StackTrace stackTrace) {
+            _handleProcessFailure(
+              Exception('WhisperX sidecar stdout decode failed: $error'),
+              terminateProcess: true,
+            );
+          },
+        );
 
     _stderrSub = process.stderr
-        .transform(utf8.decoder)
+        .transform(const Utf8Decoder(allowMalformed: true))
         .transform(const LineSplitter())
-        .listen((line) {
-          debugPrint('[WhisperX][stderr] $line');
-          final String? id = _activeRequestForLogs;
-          if (id == null) return;
-          final _PendingRequest? pending = _pending[id];
-          pending?.onLog?.call(line);
-        });
+        .listen(
+          (line) {
+            debugPrint('[WhisperX][stderr] $line');
+            final String? id = _activeRequestForLogs;
+            if (id == null) return;
+            final _PendingRequest? pending = _pending[id];
+            pending?.onLog?.call(line);
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            _handleProcessFailure(
+              Exception('WhisperX sidecar stderr decode failed: $error'),
+              terminateProcess: true,
+            );
+          },
+        );
 
     process.exitCode.then((code) {
-      final Exception error = Exception(
-        'WhisperX sidecar exited unexpectedly: $code',
+      _handleProcessFailure(
+        Exception('WhisperX sidecar exited unexpectedly: $code'),
       );
-      final readyCompleter = _readyCompleter;
-      if (readyCompleter != null && !readyCompleter.isCompleted) {
-        readyCompleter.completeError(error);
-      }
-      for (final pending in _pending.values) {
-        if (!pending.completer.isCompleted) {
-          pending.completer.completeError(error);
-        }
-      }
-      _pending.clear();
-      _activeRequestForLogs = null;
-      _process = null;
     });
 
     await _readyCompleter!.future.timeout(
@@ -200,6 +294,30 @@ class WhisperXSidecar {
     }
   }
 
+  void _handleProcessFailure(
+    Exception error, {
+    bool terminateProcess = false,
+  }) {
+    if (terminateProcess) {
+      _process?.kill();
+    }
+
+    final readyCompleter = _readyCompleter;
+    if (readyCompleter != null && !readyCompleter.isCompleted) {
+      readyCompleter.completeError(error);
+    }
+    for (final pending in _pending.values) {
+      if (!pending.completer.isCompleted) {
+        pending.completer.completeError(error);
+      }
+    }
+    _pending.clear();
+    _activeRequestForLogs = null;
+    _runtimeProbeFuture = null;
+    _startedDependencyProfileId = null;
+    _process = null;
+  }
+
   Future<Map<String, dynamic>> transcribe({
     required String wavPath,
     required String modelName,
@@ -227,6 +345,31 @@ class WhisperXSidecar {
       onStatus: onStatus,
       onLog: onLog,
     );
+  }
+
+  Future<WhisperXRuntimeProbe> probeRuntime() {
+    final Future<WhisperXRuntimeProbe>? cached = _runtimeProbeFuture;
+    if (cached != null) {
+      return cached;
+    }
+
+    final Future<WhisperXRuntimeProbe> future = _sendRequest(
+      method: 'probe_runtime',
+      params: const <String, dynamic>{},
+    ).then(WhisperXRuntimeProbe.fromPayload);
+
+    _runtimeProbeFuture = future;
+    unawaited(
+      future.then<void>(
+        (_) {},
+        onError: (_) {
+          if (identical(_runtimeProbeFuture, future)) {
+            _runtimeProbeFuture = null;
+          }
+        },
+      ),
+    );
+    return future;
   }
 
   Future<Map<String, dynamic>> _sendRequest({
@@ -287,5 +430,7 @@ class WhisperXSidecar {
     _readyCompleter = null;
     _pending.clear();
     _activeRequestForLogs = null;
+    _runtimeProbeFuture = null;
+    _startedDependencyProfileId = null;
   }
 }

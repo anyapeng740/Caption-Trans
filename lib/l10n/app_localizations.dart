@@ -248,6 +248,42 @@ abstract class AppLocalizations {
   /// **'Preparing WhisperX runtime...'**
   String get preparingRuntime;
 
+  /// No description provided for @runtimeChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking WhisperX runtime...'**
+  String get runtimeChecking;
+
+  /// No description provided for @runtimeDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading runtime package...'**
+  String get runtimeDownloading;
+
+  /// No description provided for @runtimeExtracting.
+  ///
+  /// In en, this message translates to:
+  /// **'Extracting runtime package...'**
+  String get runtimeExtracting;
+
+  /// No description provided for @runtimeCreatingEnvironment.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating Python environment...'**
+  String get runtimeCreatingEnvironment;
+
+  /// No description provided for @runtimeInstallingDependencies.
+  ///
+  /// In en, this message translates to:
+  /// **'Installing WhisperX dependencies...'**
+  String get runtimeInstallingDependencies;
+
+  /// No description provided for @runtimeStartingSidecar.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting WhisperX sidecar...'**
+  String get runtimeStartingSidecar;
+
   /// No description provided for @transcodingAudio.
   ///
   /// In en, this message translates to:

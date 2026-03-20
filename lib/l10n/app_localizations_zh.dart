@@ -84,6 +84,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get preparingRuntime => '正在准备 WhisperX 运行时...';
 
   @override
+  String get runtimeChecking => '正在检查 WhisperX 运行时...';
+
+  @override
+  String get runtimeDownloading => '正在下载运行时包...';
+
+  @override
+  String get runtimeExtracting => '正在解压运行时包...';
+
+  @override
+  String get runtimeCreatingEnvironment => '正在创建 Python 环境...';
+
+  @override
+  String get runtimeInstallingDependencies => '正在安装 WhisperX 依赖...';
+
+  @override
+  String get runtimeStartingSidecar => '正在启动 WhisperX 侧车...';
+
+  @override
   String get transcodingAudio => '正在将媒体转码为音频...';
 
   @override

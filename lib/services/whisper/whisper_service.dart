@@ -1,9 +1,26 @@
 import 'dart:io';
 
+import '../../models/whisper_runtime_info.dart';
 import '../../models/subtitle_segment.dart';
 import '../../models/transcription_result.dart';
 import '../audio/media_to_wav_converter.dart';
 import 'whisperx_sidecar.dart';
+
+class _WhisperExecutionConfig {
+  final String device;
+  final String computeType;
+  final int batchSize;
+  final bool usesCuda;
+  final String? statusDetail;
+
+  const _WhisperExecutionConfig({
+    required this.device,
+    required this.computeType,
+    required this.batchSize,
+    required this.usesCuda,
+    this.statusDetail,
+  });
+}
 
 /// Service for transcribing media using WhisperX through a local Python sidecar.
 class WhisperService {
@@ -16,38 +33,40 @@ class WhisperService {
     'large-v3-turbo': 'large-v3-turbo',
   };
 
-  static const String _defaultDevice = 'cpu';
-  static const String _defaultComputeType = 'int8';
-  static const int _defaultBatchSize = 4;
+  static const String _cpuDevice = 'cpu';
+  static const String _cpuComputeType = 'int8';
+  static const int _cpuBatchSize = 4;
 
   final WhisperXSidecar _sidecar = WhisperXSidecar();
   final MediaToWavConverter _wavConverter = MediaToWavConverter();
 
   String? _currentModel;
 
-  /// Download sidecar runtime resources with byte-accurate progress.
+  /// Prepare sidecar runtime resources with phase-aware status updates.
   ///
-  /// If resources are already cached, the callback receives an immediate 100%.
+  /// Only the actual runtime download phase reports determinate byte progress.
   Future<void> downloadModel(
     String modelName, {
     void Function(int received, int total)? onDownloadProgress,
+    void Function(String phase, double? progress)? onPreparationState,
   }) async {
     final String? whisperxModel = modelMap[modelName];
     if (whisperxModel == null) {
       throw ArgumentError('Unknown model: $modelName');
     }
 
-    bool progressUpdated = false;
     await _sidecar.ensureStarted(
+      onBootstrapStatus: (phase) {
+        onPreparationState?.call(phase, null);
+      },
       onRuntimeDownloadProgress: (received, total) {
-        progressUpdated = true;
         onDownloadProgress?.call(received, total);
+        onPreparationState?.call(
+          'downloading_runtime',
+          total > 0 ? received / total : null,
+        );
       },
     );
-
-    if (!progressUpdated) {
-      onDownloadProgress?.call(1, 1);
-    }
   }
 
   /// Ensure sidecar is ready and mark the selected model for next transcription.
@@ -74,6 +93,7 @@ class WhisperService {
     String language = 'auto',
     void Function(String status, String? detail)? onStatus,
     void Function(String line)? onLog,
+    void Function(WhisperRuntimeInfo info)? onRuntimeInfo,
   }) async {
     final String? selectedModel = _currentModel;
     if (selectedModel == null) {
@@ -81,18 +101,258 @@ class WhisperService {
     }
 
     final String whisperxModel = modelMap[selectedModel]!;
-    final Map<String, dynamic> payload = await _sidecar.transcribe(
+    final Map<String, dynamic> payload = await _transcribeWithFallbacks(
       wavPath: wavPath,
       modelName: whisperxModel,
       language: language == 'auto' ? null : language,
-      device: _defaultDevice,
-      computeType: _defaultComputeType,
-      batchSize: _defaultBatchSize,
+      onStatus: onStatus,
+      onLog: onLog,
+      onRuntimeInfo: onRuntimeInfo,
+    );
+    return _parseTranscriptionPayload(payload, requestedLanguage: language);
+  }
+
+  Future<WhisperRuntimeInfo> inspectRuntime({required String modelName}) async {
+    final String whisperxModel = modelMap[modelName] ?? modelName;
+    final _WhisperExecutionConfig config = await _resolveExecutionConfig(
+      whisperxModel,
+    );
+    return _buildRuntimeInfo(config);
+  }
+
+  Future<Map<String, dynamic>> _transcribeWithFallbacks({
+    required String wavPath,
+    required String modelName,
+    required String? language,
+    void Function(String status, String? detail)? onStatus,
+    void Function(String line)? onLog,
+    void Function(WhisperRuntimeInfo info)? onRuntimeInfo,
+  }) async {
+    final _WhisperExecutionConfig primaryConfig = await _resolveExecutionConfig(
+      modelName,
+    );
+
+    try {
+      return await _transcribeWithConfig(
+        wavPath: wavPath,
+        modelName: modelName,
+        language: language,
+        config: primaryConfig,
+        onStatus: onStatus,
+        onLog: onLog,
+        onRuntimeInfo: onRuntimeInfo,
+      );
+    } catch (error) {
+      if (!primaryConfig.usesCuda || !_looksLikeCudaFailure(error)) {
+        rethrow;
+      }
+
+      final _WhisperExecutionConfig? degradedConfig = _buildDegradedCudaConfig(
+        primaryConfig,
+      );
+      if (degradedConfig != null) {
+        await _restartSidecarForRetry();
+        try {
+          return await _transcribeWithConfig(
+            wavPath: wavPath,
+            modelName: modelName,
+            language: language,
+            config: degradedConfig,
+            onStatus: onStatus,
+            onLog: onLog,
+            onRuntimeInfo: onRuntimeInfo,
+          );
+        } catch (retryError) {
+          if (!_looksLikeCudaFailure(retryError)) {
+            rethrow;
+          }
+        }
+      }
+
+      await _restartSidecarForRetry();
+      return _transcribeWithConfig(
+        wavPath: wavPath,
+        modelName: modelName,
+        language: language,
+        config: _cpuConfig(
+          statusDetail:
+              'CUDA failed, falling back to CPU ($_cpuComputeType, batch=$_cpuBatchSize)',
+        ),
+        onStatus: onStatus,
+        onLog: onLog,
+        onRuntimeInfo: onRuntimeInfo,
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> _transcribeWithConfig({
+    required String wavPath,
+    required String modelName,
+    required String? language,
+    required _WhisperExecutionConfig config,
+    void Function(String status, String? detail)? onStatus,
+    void Function(String line)? onLog,
+    void Function(WhisperRuntimeInfo info)? onRuntimeInfo,
+  }) async {
+    onRuntimeInfo?.call(await _buildRuntimeInfo(config));
+    onStatus?.call('preparing_model', config.statusDetail);
+    return _sidecar.transcribe(
+      wavPath: wavPath,
+      modelName: modelName,
+      language: language,
+      device: config.device,
+      computeType: config.computeType,
+      batchSize: config.batchSize,
       noAlign: false,
       onStatus: onStatus,
       onLog: onLog,
     );
-    return _parseTranscriptionPayload(payload, requestedLanguage: language);
+  }
+
+  Future<_WhisperExecutionConfig> _resolveExecutionConfig(
+    String whisperxModel,
+  ) async {
+    if (!Platform.isWindows) {
+      return _cpuConfig();
+    }
+
+    final WhisperXRuntimeProbe probe = await _loadRuntimeProbe();
+    if (!probe.canUseCuda) {
+      return _cpuConfig();
+    }
+
+    final String computeType = _selectCudaComputeType(probe.cudaComputeTypes);
+    final int batchSize = _selectCudaBatchSize(whisperxModel);
+    final String deviceName = (probe.cudaDeviceName?.trim().isNotEmpty ?? false)
+        ? probe.cudaDeviceName!.trim()
+        : 'CUDA GPU';
+
+    return _WhisperExecutionConfig(
+      device: 'cuda',
+      computeType: computeType,
+      batchSize: batchSize,
+      usesCuda: true,
+      statusDetail:
+          'Using $deviceName on CUDA ($computeType, batch=$batchSize)',
+    );
+  }
+
+  Future<WhisperXRuntimeProbe> _loadRuntimeProbe() async {
+    return _sidecar.probeRuntime();
+  }
+
+  Future<WhisperRuntimeInfo> _buildRuntimeInfo(
+    _WhisperExecutionConfig config,
+  ) async {
+    final WhisperXRuntimeProbe? probe = Platform.isWindows
+        ? await _loadRuntimeProbe()
+        : null;
+
+    final bool cudaAvailable = probe?.cudaAvailable == true;
+    final String? torchCudaVersion = probe?.torchCudaVersion;
+    final String? deviceName = config.usesCuda
+        ? (probe?.cudaDeviceName?.trim().isNotEmpty == true
+              ? probe!.cudaDeviceName!.trim()
+              : 'CUDA GPU')
+        : null;
+    final String modeLabel = switch ((config.usesCuda, cudaAvailable)) {
+      (true, _) => 'CUDA GPU',
+      (false, true) => 'CPU fallback',
+      (false, false) => 'CPU',
+    };
+
+    return WhisperRuntimeInfo(
+      modeLabel: modeLabel,
+      deviceName: deviceName,
+      computeType: config.computeType,
+      batchSize: config.batchSize,
+      usingGpu: config.usesCuda,
+      cudaAvailable: cudaAvailable,
+      torchCudaVersion: torchCudaVersion,
+      note: config.statusDetail,
+    );
+  }
+
+  _WhisperExecutionConfig _cpuConfig({String? statusDetail}) {
+    return _WhisperExecutionConfig(
+      device: _cpuDevice,
+      computeType: _cpuComputeType,
+      batchSize: _cpuBatchSize,
+      usesCuda: false,
+      statusDetail: statusDetail,
+    );
+  }
+
+  _WhisperExecutionConfig? _buildDegradedCudaConfig(
+    _WhisperExecutionConfig config,
+  ) {
+    if (!config.usesCuda) {
+      return null;
+    }
+
+    final int smallerBatchSize = config.batchSize > 4
+        ? config.batchSize ~/ 2
+        : 4;
+    if (config.computeType == 'int8' && smallerBatchSize >= config.batchSize) {
+      return null;
+    }
+
+    return _WhisperExecutionConfig(
+      device: 'cuda',
+      computeType: 'int8',
+      batchSize: smallerBatchSize,
+      usesCuda: true,
+      statusDetail:
+          'CUDA init failed or VRAM is low, retrying lighter GPU mode (int8, batch=$smallerBatchSize)',
+    );
+  }
+
+  String _selectCudaComputeType(List<String> computeTypes) {
+    final Set<String> normalized = computeTypes
+        .map((String item) => item.trim().toLowerCase())
+        .where((String item) => item.isNotEmpty)
+        .toSet();
+
+    for (final String candidate in <String>[
+      'float16',
+      'int8_float16',
+      'int8',
+      'float32',
+    ]) {
+      if (normalized.contains(candidate)) {
+        return candidate;
+      }
+    }
+
+    return 'float16';
+  }
+
+  int _selectCudaBatchSize(String whisperxModel) {
+    if (whisperxModel == 'medium' || whisperxModel.startsWith('large')) {
+      return 8;
+    }
+    return 16;
+  }
+
+  bool _looksLikeCudaFailure(Object error) {
+    final String lower = error.toString().toLowerCase();
+    return <String>[
+      'cuda',
+      'cudnn',
+      'cublas',
+      'ctranslate2',
+      'compute type',
+      'out of memory',
+      'insufficient memory',
+      'not enough memory',
+      'device-side assert',
+      'failed to load library',
+      'dll load failed',
+    ].any(lower.contains);
+  }
+
+  Future<void> _restartSidecarForRetry() async {
+    await _sidecar.dispose();
   }
 
   Future<void> cleanupTempWav(

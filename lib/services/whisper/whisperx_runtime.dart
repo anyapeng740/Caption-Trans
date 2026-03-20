@@ -40,6 +40,46 @@ class _ManagedRuntimeSpec {
   });
 }
 
+class _WhisperXDependencyProfile {
+  final String id;
+  final bool prefersCuda;
+  final String? torchIndexUrl;
+
+  const _WhisperXDependencyProfile({
+    required this.id,
+    required this.prefersCuda,
+    this.torchIndexUrl,
+  });
+}
+
+class _CudaVersion implements Comparable<_CudaVersion> {
+  final int major;
+  final int minor;
+
+  const _CudaVersion(this.major, this.minor);
+
+  static _CudaVersion? tryParse(String value) {
+    final Match? match = RegExp(r'(\d+)\.(\d+)').firstMatch(value);
+    if (match == null) {
+      return null;
+    }
+
+    return _CudaVersion(int.parse(match.group(1)!), int.parse(match.group(2)!));
+  }
+
+  @override
+  int compareTo(_CudaVersion other) {
+    final int majorDiff = major.compareTo(other.major);
+    if (majorDiff != 0) {
+      return majorDiff;
+    }
+    return minor.compareTo(other.minor);
+  }
+
+  @override
+  String toString() => '$major.$minor';
+}
+
 /// Ensures local Python runtime for WhisperX sidecar execution.
 ///
 /// Runtime resolution order:
@@ -51,22 +91,37 @@ class WhisperXRuntime {
   static const String _workerFileName = 'whisperx_worker.py';
   static const String _manifestAssetPath =
       'assets/sidecar/runtime_manifest.json';
-  static const String _runtimeVersion = '2';
-  static const String _venvMarkerFile = '.runtime_ready_v2';
+  static const String _runtimeVersion = '3';
+  static const String _venvMarkerFile = '.runtime_ready_v3';
   static const String _managedMarkerFile = '.managed_runtime_v1';
   static const String _targetWhisperxVersion = '3.8.2';
+  static const String _torchCpuIndexUrl =
+      'https://download.pytorch.org/whl/cpu';
 
   WhisperXRuntime._();
 
   static final WhisperXRuntime instance = WhisperXRuntime._();
 
   WhisperXRuntimeInfo? _cachedInfo;
+  String? _cachedDependencyProfileId;
+
+  Future<String> resolveCurrentDependencyProfileId() async {
+    final _WhisperXDependencyProfile profile =
+        await _resolveDependencyProfile();
+    return profile.id;
+  }
 
   Future<WhisperXRuntimeInfo> ensureReady({
     void Function(int percent)? onProgress,
     void Function(int received, int total)? onDownloadProgress,
+    void Function(String phase)? onStatus,
   }) async {
-    if (_cachedInfo != null) {
+    onStatus?.call('checking_runtime');
+    final _WhisperXDependencyProfile dependencyProfile =
+        await _resolveDependencyProfile();
+
+    if (_cachedInfo != null &&
+        _cachedDependencyProfileId == dependencyProfile.id) {
       onProgress?.call(100);
       return _cachedInfo!;
     }
@@ -86,10 +141,12 @@ class WhisperXRuntime {
       runtimeDir,
       onProgress: onProgress,
       onDownloadProgress: onDownloadProgress,
+      onStatus: onStatus,
     );
 
     onProgress?.call(62);
     final Directory venvDir = Directory(p.join(runtimeDir.path, 'venv'));
+    onStatus?.call('creating_environment');
     await _ensureVenv(venvDir, basePythonExecutable);
 
     final String venvPythonPath = _resolveVenvPython(venvDir);
@@ -99,12 +156,21 @@ class WhisperXRuntime {
 
     onProgress?.call(72);
     final File marker = File(p.join(runtimeDir.path, _venvMarkerFile));
-    if (!await _isWhisperxInstalled(venvPythonPath) || !await marker.exists()) {
-      await _installDependencies(venvPythonPath, onProgress: onProgress);
+    if (!await _isWhisperxInstalled(venvPythonPath) ||
+        !await _isDependencyMarkerValid(marker, dependencyProfile)) {
+      await _installDependencies(
+        venvPythonPath,
+        dependencyProfile: dependencyProfile,
+        onProgress: onProgress,
+        onStatus: onStatus,
+      );
       await marker.writeAsString(
         jsonEncode({
           'runtimeVersion': _runtimeVersion,
           'whisperxVersion': _targetWhisperxVersion,
+          'dependencyProfileId': dependencyProfile.id,
+          'prefersCuda': dependencyProfile.prefersCuda,
+          'torchIndexUrl': dependencyProfile.torchIndexUrl,
           'createdAt': DateTime.now().toIso8601String(),
         }),
       );
@@ -117,6 +183,7 @@ class WhisperXRuntime {
       workerScriptPath: workerPath,
     );
     _cachedInfo = info;
+    _cachedDependencyProfileId = dependencyProfile.id;
     onProgress?.call(100);
     return info;
   }
@@ -142,6 +209,7 @@ class WhisperXRuntime {
     Directory runtimeDir, {
     void Function(int percent)? onProgress,
     void Function(int received, int total)? onDownloadProgress,
+    void Function(String phase)? onStatus,
   }) async {
     final _ManagedRuntimeSpec? managedSpec = await _loadManagedSpec();
     if (managedSpec != null) {
@@ -150,6 +218,7 @@ class WhisperXRuntime {
         managedSpec,
         onProgress: onProgress,
         onDownloadProgress: onDownloadProgress,
+        onStatus: onStatus,
       );
       if (File(managedPython).existsSync()) {
         return managedPython;
@@ -232,6 +301,7 @@ class WhisperXRuntime {
     _ManagedRuntimeSpec spec, {
     void Function(int percent)? onProgress,
     void Function(int received, int total)? onDownloadProgress,
+    void Function(String phase)? onStatus,
   }) async {
     final Directory managedDir = Directory(
       p.join(runtimeDir.path, 'managed_python_${spec.id}'),
@@ -256,6 +326,7 @@ class WhisperXRuntime {
 
     try {
       onProgress?.call(14);
+      onStatus?.call('downloading_runtime');
       final String archiveExt = spec.archiveType == 'tar.gz' ? 'tar.gz' : 'zip';
       final File archiveFile = File(
         p.join(tempDir.path, 'runtime.$archiveExt'),
@@ -285,6 +356,7 @@ class WhisperXRuntime {
       }
 
       onProgress?.call(40);
+      onStatus?.call('extracting_runtime');
       final Directory stageDir = Directory(p.join(tempDir.path, 'stage'));
       await stageDir.create(recursive: true);
       await _extractArchive(archiveFile, stageDir, spec.archiveType);
@@ -345,6 +417,154 @@ class WhisperXRuntime {
               spec.archiveType.toLowerCase() &&
           (decoded['python_relative_path'] as String? ?? '') ==
               spec.pythonRelativePath;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<_WhisperXDependencyProfile> _resolveDependencyProfile() async {
+    if (!Platform.isWindows) {
+      return const _WhisperXDependencyProfile(
+        id: 'default',
+        prefersCuda: false,
+      );
+    }
+
+    final _CudaVersion? cudaVersion = await _detectWindowsCudaVersion();
+    final String? torchChannel = _selectWindowsTorchChannel(cudaVersion);
+    if (torchChannel == null) {
+      return const _WhisperXDependencyProfile(
+        id: 'windows-cpu',
+        prefersCuda: false,
+        torchIndexUrl: _torchCpuIndexUrl,
+      );
+    }
+
+    return _WhisperXDependencyProfile(
+      id: 'windows-$torchChannel',
+      prefersCuda: true,
+      torchIndexUrl: 'https://download.pytorch.org/whl/$torchChannel',
+    );
+  }
+
+  Future<_CudaVersion?> _detectWindowsCudaVersion() async {
+    if (!Platform.isWindows) {
+      return null;
+    }
+
+    final String? systemRoot = Platform.environment['SystemRoot'];
+    final Set<String> candidates = <String>{
+      'nvidia-smi',
+      if ((systemRoot ?? '').isNotEmpty)
+        p.join(systemRoot!, 'System32', 'nvidia-smi.exe'),
+    };
+
+    for (final String executable in candidates) {
+      try {
+        final ProcessResult result = await Process.run(
+          executable,
+          const <String>[],
+        );
+        if (result.exitCode != 0) {
+          continue;
+        }
+
+        final String output = '${result.stdout}\n${result.stderr}';
+        final Match? match = RegExp(
+          r'CUDA Version:\s*([0-9]+\.[0-9]+)',
+          caseSensitive: false,
+        ).firstMatch(output);
+        if (match == null) {
+          continue;
+        }
+
+        final _CudaVersion? parsed = _CudaVersion.tryParse(match.group(1)!);
+        if (parsed != null) {
+          return parsed;
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+
+    return _detectWindowsCudaVersionFromEnvironment();
+  }
+
+  _CudaVersion? _detectWindowsCudaVersionFromEnvironment() {
+    _CudaVersion? best;
+
+    for (final MapEntry<String, String> entry in Platform.environment.entries) {
+      final Match? match = RegExp(
+        r'^CUDA_PATH_V(\d+)_(\d+)$',
+        caseSensitive: false,
+      ).firstMatch(entry.key);
+      if (match == null) {
+        continue;
+      }
+
+      final _CudaVersion parsed = _CudaVersion(
+        int.parse(match.group(1)!),
+        int.parse(match.group(2)!),
+      );
+      if (best == null || parsed.compareTo(best) > 0) {
+        best = parsed;
+      }
+    }
+
+    if (best != null) {
+      return best;
+    }
+
+    final String? cudaPath = Platform.environment['CUDA_PATH'];
+    if (cudaPath == null || cudaPath.trim().isEmpty) {
+      return null;
+    }
+
+    return _CudaVersion.tryParse(cudaPath);
+  }
+
+  String? _selectWindowsTorchChannel(_CudaVersion? cudaVersion) {
+    if (cudaVersion == null) {
+      return null;
+    }
+
+    if (cudaVersion.compareTo(const _CudaVersion(12, 6)) >= 0) {
+      return 'cu126';
+    }
+    if (cudaVersion.compareTo(const _CudaVersion(12, 4)) >= 0) {
+      return 'cu124';
+    }
+    if (cudaVersion.compareTo(const _CudaVersion(12, 1)) >= 0) {
+      return 'cu121';
+    }
+    if (cudaVersion.compareTo(const _CudaVersion(11, 8)) >= 0) {
+      return 'cu118';
+    }
+
+    return null;
+  }
+
+  Future<bool> _isDependencyMarkerValid(
+    File marker,
+    _WhisperXDependencyProfile dependencyProfile,
+  ) async {
+    if (!await marker.exists()) {
+      return false;
+    }
+
+    try {
+      final dynamic decoded = jsonDecode(await marker.readAsString());
+      if (decoded is! Map<String, dynamic>) {
+        return false;
+      }
+
+      return (decoded['runtimeVersion'] as String? ?? '') == _runtimeVersion &&
+          (decoded['whisperxVersion'] as String? ?? '') ==
+              _targetWhisperxVersion &&
+          (decoded['dependencyProfileId'] as String? ?? '') ==
+              dependencyProfile.id &&
+          (decoded['torchIndexUrl'] as String?) ==
+              dependencyProfile.torchIndexUrl;
     } catch (_) {
       return false;
     }
@@ -468,20 +688,24 @@ class WhisperXRuntime {
   Future<bool> _isWhisperxInstalled(String pythonExecutable) async {
     final result = await Process.run(pythonExecutable, [
       '-c',
-      'import whisperx, numpy; print(whisperx.__version__)',
+      'from importlib import metadata; import whisperx, numpy; '
+          'print(metadata.version("whisperx"))',
     ]);
     if (result.exitCode != 0) {
       return false;
     }
 
     final String version = (result.stdout as String).trim();
-    return version.isNotEmpty;
+    return version == _targetWhisperxVersion;
   }
 
   Future<void> _installDependencies(
     String pythonExecutable, {
+    required _WhisperXDependencyProfile dependencyProfile,
     void Function(int percent)? onProgress,
+    void Function(String phase)? onStatus,
   }) async {
+    onStatus?.call('installing_dependencies');
     onProgress?.call(78);
     await _runOrThrow(pythonExecutable, [
       '-m',
@@ -491,14 +715,66 @@ class WhisperXRuntime {
       'pip',
     ], errorPrefix: 'Failed to upgrade pip for WhisperX runtime.');
 
-    onProgress?.call(86);
+    onProgress?.call(84);
     await _runOrThrow(
       pythonExecutable,
       ['-m', 'pip', 'install', 'whisperx==$_targetWhisperxVersion', 'numpy'],
       errorPrefix: 'Failed to install WhisperX runtime dependencies.',
     );
 
+    if (Platform.isWindows && dependencyProfile.torchIndexUrl != null) {
+      // whisperx resolves torch from the default index, which can replace a
+      // previously installed CUDA wheel with the CPU build on Windows.
+      // Reinstall the desired torch channel last so probe_runtime sees the
+      // actual GPU-capable runtime.
+      onProgress?.call(90);
+      await _installWindowsTorchRuntime(
+        pythonExecutable,
+        dependencyProfile: dependencyProfile,
+      );
+    }
+
     onProgress?.call(94);
+  }
+
+  Future<void> _installWindowsTorchRuntime(
+    String pythonExecutable, {
+    required _WhisperXDependencyProfile dependencyProfile,
+  }) async {
+    await _runBestEffort(pythonExecutable, [
+      '-m',
+      'pip',
+      'uninstall',
+      '-y',
+      'torch',
+      'torchaudio',
+      'torchvision',
+    ]);
+
+    await _runOrThrow(
+      pythonExecutable,
+      [
+        '-m',
+        'pip',
+        'install',
+        '--upgrade',
+        'torch',
+        'torchaudio',
+        '--index-url',
+        dependencyProfile.torchIndexUrl!,
+      ],
+      errorPrefix: dependencyProfile.prefersCuda
+          ? 'Failed to install CUDA-enabled PyTorch runtime for WhisperX.'
+          : 'Failed to install CPU PyTorch runtime for WhisperX.',
+    );
+  }
+
+  Future<void> _runBestEffort(String executable, List<String> args) async {
+    try {
+      await Process.run(executable, args);
+    } catch (_) {
+      return;
+    }
   }
 
   Future<void> _runOrThrow(

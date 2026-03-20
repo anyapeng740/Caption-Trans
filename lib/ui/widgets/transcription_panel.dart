@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../blocs/transcription/transcription_state.dart';
 import '../../core/constants.dart';
+import '../../models/whisper_runtime_info.dart';
 import 'package:caption_trans/l10n/app_localizations.dart';
 
 /// Panel for controlling Whisper transcription.
@@ -22,6 +23,7 @@ class TranscriptionPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context)!;
+    final WhisperRuntimeInfo? runtimeInfo = _runtimeInfo;
 
     return Card(
       child: Padding(
@@ -84,7 +86,16 @@ class TranscriptionPanel extends StatelessWidget {
                 state is TranscriptionError)
               Padding(
                 padding: const EdgeInsets.only(top: 20),
-                child: _buildStatusWidget(context, l10n),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildStatusWidget(context, l10n),
+                    if (runtimeInfo != null) ...[
+                      const SizedBox(height: 12),
+                      _buildRuntimeInfoCard(context, runtimeInfo),
+                    ],
+                  ],
+                ),
               ),
           ],
         ),
@@ -101,6 +112,16 @@ class TranscriptionPanel extends StatelessWidget {
       state is VideoSelected ||
       state is TranscriptionError ||
       state is TranscriptionComplete;
+
+  WhisperRuntimeInfo? get _runtimeInfo {
+    final TranscriptionState currentState = state;
+    if (currentState is RuntimePreparing) return currentState.runtimeInfo;
+    if (currentState is AudioTranscoding) return currentState.runtimeInfo;
+    if (currentState is Transcribing) return currentState.runtimeInfo;
+    if (currentState is TranscriptionComplete) return currentState.runtimeInfo;
+    if (currentState is TranscriptionError) return currentState.runtimeInfo;
+    return null;
+  }
 
   Widget _buildStartButton(BuildContext context, AppLocalizations l10n) {
     if (_isProcessing) {
@@ -122,11 +143,20 @@ class TranscriptionPanel extends StatelessWidget {
 
     if (state is RuntimePreparing) {
       final s = state as RuntimePreparing;
-      return _buildProgressRow(
+      final String label = _runtimePreparingLabel(l10n, s.phase);
+      if (s.progress != null) {
+        return _buildProgressRow(
+          context,
+          icon: Icons.download_rounded,
+          label: label,
+          progress: s.progress,
+          color: Colors.blue,
+        );
+      }
+      return _buildBusyRow(
         context,
-        icon: Icons.download_rounded,
-        label: l10n.preparingRuntime,
-        progress: s.progress >= 0 ? s.progress : null,
+        icon: Icons.settings_suggest_rounded,
+        label: label,
         color: Colors.blue,
       );
     }
@@ -238,6 +268,37 @@ class TranscriptionPanel extends StatelessWidget {
     );
   }
 
+  Widget _buildBusyRow(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation(color),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Colors.white.withValues(alpha: 0.8),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildStatusRow(
     BuildContext context, {
     required IconData icon,
@@ -260,6 +321,131 @@ class TranscriptionPanel extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  Widget _buildRuntimeInfoCard(
+    BuildContext context,
+    WhisperRuntimeInfo runtimeInfo,
+  ) {
+    final bool usingGpu = runtimeInfo.usingGpu;
+    final Color accent = usingGpu ? Colors.greenAccent : Colors.orangeAccent;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accent.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                usingGpu ? Icons.memory_rounded : Icons.developer_board_rounded,
+                size: 16,
+                color: accent,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  usingGpu ? 'GPU acceleration active' : 'CPU transcription',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: accent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildRuntimeChip(runtimeInfo.modeLabel, accent),
+              if (runtimeInfo.deviceName != null &&
+                  runtimeInfo.deviceName!.trim().isNotEmpty)
+                _buildRuntimeChip(runtimeInfo.deviceName!, Colors.white70),
+              _buildRuntimeChip(
+                'compute ${runtimeInfo.computeType}',
+                Colors.white70,
+              ),
+              _buildRuntimeChip(
+                'batch ${runtimeInfo.batchSize}',
+                Colors.white70,
+              ),
+              if (runtimeInfo.torchCudaVersion != null &&
+                  runtimeInfo.torchCudaVersion!.trim().isNotEmpty)
+                _buildRuntimeChip(
+                  'torch CUDA ${runtimeInfo.torchCudaVersion!}',
+                  Colors.white70,
+                ),
+            ],
+          ),
+          if (runtimeInfo.note != null &&
+              runtimeInfo.note!.trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              runtimeInfo.note!,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Colors.white.withValues(alpha: 0.72),
+              ),
+            ),
+          ],
+          if (!usingGpu && runtimeInfo.cudaAvailable) ...[
+            const SizedBox(height: 8),
+            Text(
+              'CUDA is available, but this run is using CPU fallback.',
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: Colors.orangeAccent),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRuntimeChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  String _runtimePreparingLabel(
+    AppLocalizations l10n,
+    RuntimePreparingPhase phase,
+  ) {
+    switch (phase) {
+      case RuntimePreparingPhase.checkingRuntime:
+        return l10n.runtimeChecking;
+      case RuntimePreparingPhase.downloadingRuntime:
+        return l10n.runtimeDownloading;
+      case RuntimePreparingPhase.extractingRuntime:
+        return l10n.runtimeExtracting;
+      case RuntimePreparingPhase.creatingEnvironment:
+        return l10n.runtimeCreatingEnvironment;
+      case RuntimePreparingPhase.installingDependencies:
+        return l10n.runtimeInstallingDependencies;
+      case RuntimePreparingPhase.startingSidecar:
+        return l10n.runtimeStartingSidecar;
+    }
   }
 
   Widget _buildModelMenuItem(

@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
 import contextlib
+import gc
 import json
+import platform
 import re
 import sys
 import traceback
@@ -14,6 +16,19 @@ import whisperx
 
 SAMPLE_RATE = 16000
 ANSI_ESCAPE_RE = re.compile(r"\x1B[@-_][0-?]*[ -/]*[@-~]")
+
+
+def configure_stdio() -> None:
+    # The Flutter side expects UTF-8 JSON lines on stdio. On Windows, Python can
+    # otherwise inherit a legacy code page for piped stdout/stderr, which breaks
+    # decoding when transcript text or library logs contain non-ASCII characters.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="backslashreplace", line_buffering=True)
+
+
+configure_stdio()
 JSON_STDOUT = sys.stdout
 
 
@@ -160,6 +175,33 @@ class WhisperXWorker:
         self.models: Dict[Tuple[str, str, str, Optional[str]], Any] = {}
         self.align_models: Dict[Tuple[str, str], Tuple[Any, Dict[str, Any]]] = {}
 
+    def clear_device_resources(self, device: Optional[str] = None) -> None:
+        if device is None:
+            self.models.clear()
+            self.align_models.clear()
+        else:
+            self.models = {
+                key: value for key, value in self.models.items() if key[1] != device
+            }
+            self.align_models = {
+                key: value
+                for key, value in self.align_models.items()
+                if key[1] != device
+            }
+
+        gc.collect()
+
+        if device not in (None, "cuda"):
+            return
+
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            return
+
     def get_model(
         self,
         model_name: str,
@@ -170,6 +212,9 @@ class WhisperXWorker:
         key = (model_name, device, compute_type, language)
         if key in self.models:
             return self.models[key]
+
+        if device == "cuda":
+            self.clear_device_resources(device="cuda")
 
         model = whisperx.load_model(
             model_name,
@@ -185,12 +230,63 @@ class WhisperXWorker:
         if key in self.align_models:
             return self.align_models[key]
 
+        if device == "cuda":
+            self.align_models = {
+                cached_key: value
+                for cached_key, value in self.align_models.items()
+                if cached_key[1] != "cuda"
+            }
+            self.clear_device_resources(device="cuda")
+
         model, metadata = whisperx.load_align_model(
             language_code=language,
             device=device,
         )
         self.align_models[key] = (model, metadata)
         return model, metadata
+
+    def handle_probe_runtime(self, request_id: str) -> None:
+        payload: Dict[str, Any] = {
+            "platform": platform.system().lower(),
+            "python_version": sys.version.split()[0],
+            "whisperx_version": str(getattr(whisperx, "__version__", "")),
+            "cuda_available": False,
+            "cuda_device_count": 0,
+            "cuda_device_name": None,
+            "cuda_compute_types": [],
+        }
+
+        try:
+            import torch
+
+            payload["torch_version"] = str(getattr(torch, "__version__", ""))
+            payload["torch_cuda_version"] = getattr(torch.version, "cuda", None)
+            payload["cuda_available"] = bool(torch.cuda.is_available())
+            if payload["cuda_available"]:
+                device_count = int(torch.cuda.device_count())
+                payload["cuda_device_count"] = device_count
+                if device_count > 0:
+                    payload["cuda_device_name"] = str(torch.cuda.get_device_name(0))
+        except Exception as exc:  # pylint: disable=broad-except
+            payload["torch_error"] = str(exc)
+
+        try:
+            import ctranslate2
+
+            payload["ctranslate2_version"] = str(
+                getattr(ctranslate2, "__version__", "")
+            )
+            try:
+                compute_types = ctranslate2.get_supported_compute_types("cuda")
+                payload["cuda_compute_types"] = sorted(
+                    str(item) for item in compute_types
+                )
+            except Exception as exc:  # pylint: disable=broad-except
+                payload["ctranslate2_cuda_error"] = str(exc)
+        except Exception as exc:  # pylint: disable=broad-except
+            payload["ctranslate2_error"] = str(exc)
+
+        emit({"type": "result", "id": request_id, "payload": payload})
 
     def handle_transcribe(self, request_id: str, params: Dict[str, Any]) -> None:
         wav_path = str(params.get("wav_path") or "")
@@ -236,6 +332,9 @@ class WhisperXWorker:
                 verbose=False,
             )
         transcribe_logs.flush()
+        if device == "cuda":
+            del model
+            self.clear_device_resources(device="cuda")
 
         detected_language = str(result.get("language") or language or "unknown")
         normalized_segments = normalize_segments(result.get("segments"))
@@ -258,6 +357,9 @@ class WhisperXWorker:
                     print_progress=True,
                 )
             align_logs.flush()
+            if device == "cuda":
+                del align_model
+                self.clear_device_resources(device="cuda")
             detected_language = str(aligned.get("language") or detected_language)
             normalized_segments = normalize_segments(aligned.get("segments"))
 
@@ -276,6 +378,8 @@ class WhisperXWorker:
                 "payload": payload,
             }
         )
+        if device == "cuda":
+            self.clear_device_resources(device="cuda")
 
     def dispatch(self, message: Dict[str, Any]) -> None:
         request_id = str(message.get("id") or "")
@@ -289,6 +393,10 @@ class WhisperXWorker:
 
         if method == "transcribe":
             self.handle_transcribe(request_id, params)
+            return
+
+        if method == "probe_runtime":
+            self.handle_probe_runtime(request_id)
             return
 
         if method == "shutdown":
