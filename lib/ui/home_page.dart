@@ -47,7 +47,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   String _selectedModel = AppConstants.defaultWhisperModel;
-  String _sourceVideoLanguage = 'en';
+  String _sourceVideoLanguage = 'ja';
   String _targetLanguage = 'zh';
   String _apiKey = '';
   String _targetModel = 'gemini-2.5-flash-lite';
@@ -147,7 +147,7 @@ class _HomePageState extends State<HomePage> {
           providerId: _llmProvider,
           apiKey: _apiKey,
           baseUrl: _llmBaseUrl,
-          sourceLanguage: 'en', // dummy
+          sourceLanguage: 'ja', // dummy
           targetLanguage: 'zh', // dummy
         ),
       );

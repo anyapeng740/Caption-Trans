@@ -200,6 +200,10 @@ def build_segmentation_options(
     return options
 
 
+def should_apply_custom_segmentation(language: Optional[str]) -> bool:
+    return language == "ja"
+
+
 def load_wav_pcm_s16le(path: str) -> np.ndarray:
     with wave.open(path, "rb") as wav_file:
         channels = wav_file.getnchannels()
@@ -971,9 +975,6 @@ class WhisperXWorker:
             self.clear_device_resources(device="cuda")
 
         detected_language = str(result.get("language") or language or "unknown")
-        segmentation_options = build_segmentation_options(
-            detected_language, segmentation_overrides
-        )
         normalized_segments = normalize_segments(result.get("segments"))
 
         if not no_align and normalized_segments:
@@ -998,14 +999,17 @@ class WhisperXWorker:
                 del align_model
                 self.clear_device_resources(device="cuda")
             detected_language = str(aligned.get("language") or detected_language)
-            segmentation_options = build_segmentation_options(
-                detected_language, segmentation_overrides
-            )
-            normalized_segments = normalize_transcript_segments(
-                aligned.get("segments"),
-                detected_language,
-                segmentation_options,
-            )
+            if should_apply_custom_segmentation(detected_language):
+                segmentation_options = build_segmentation_options(
+                    detected_language, segmentation_overrides
+                )
+                normalized_segments = normalize_transcript_segments(
+                    aligned.get("segments"),
+                    detected_language,
+                    segmentation_options,
+                )
+            else:
+                normalized_segments = normalize_segments(aligned.get("segments"))
 
         emit_status(request_id, "finalizing")
         emit_progress(request_id, 96)
