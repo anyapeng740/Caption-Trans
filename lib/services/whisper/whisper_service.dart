@@ -366,6 +366,15 @@ class WhisperService {
 
     final bool cudaAvailable = probe?.cudaAvailable == true;
     final String? torchCudaVersion = probe?.torchCudaVersion;
+    final int? logicalCpuCount = (probe?.logicalCpuCount ?? 0) > 0
+        ? probe!.logicalCpuCount
+        : null;
+    final int? physicalCpuCount = (probe?.physicalCpuCount ?? 0) > 0
+        ? probe!.physicalCpuCount
+        : null;
+    final int? recommendedCpuThreads = (probe?.recommendedCpuThreads ?? 0) > 0
+        ? probe!.recommendedCpuThreads
+        : null;
     final String modeLabel = !config.usingGpu && cudaAvailable
         ? 'CPU fallback'
         : config.modeLabel;
@@ -378,6 +387,9 @@ class WhisperService {
       usingGpu: config.usingGpu,
       cudaAvailable: cudaAvailable,
       torchCudaVersion: torchCudaVersion,
+      logicalCpuCount: logicalCpuCount,
+      physicalCpuCount: physicalCpuCount,
+      recommendedCpuThreads: recommendedCpuThreads,
       note: config.statusDetail,
     );
   }

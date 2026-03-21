@@ -19,6 +19,9 @@ class WhisperXRuntimeProbe {
   final int cudaDeviceCount;
   final String? cudaDeviceName;
   final List<String> cudaComputeTypes;
+  final int logicalCpuCount;
+  final int physicalCpuCount;
+  final int recommendedCpuThreads;
   final String? torchError;
   final String? ctranslate2Version;
   final String? ctranslate2Error;
@@ -36,6 +39,9 @@ class WhisperXRuntimeProbe {
     required this.cudaDeviceCount,
     required this.cudaDeviceName,
     required this.cudaComputeTypes,
+    required this.logicalCpuCount,
+    required this.physicalCpuCount,
+    required this.recommendedCpuThreads,
     required this.torchError,
     required this.ctranslate2Version,
     required this.ctranslate2Error,
@@ -67,6 +73,10 @@ class WhisperXRuntimeProbe {
       cudaDeviceCount: (payload['cuda_device_count'] as num?)?.toInt() ?? 0,
       cudaDeviceName: (payload['cuda_device_name'] as String?)?.trim(),
       cudaComputeTypes: computeTypes,
+      logicalCpuCount: (payload['logical_cpu_count'] as num?)?.toInt() ?? 0,
+      physicalCpuCount: (payload['physical_cpu_count'] as num?)?.toInt() ?? 0,
+      recommendedCpuThreads:
+          (payload['recommended_cpu_threads'] as num?)?.toInt() ?? 0,
       torchError: (payload['torch_error'] as String?)?.trim(),
       ctranslate2Version: (payload['ctranslate2_version'] as String?)?.trim(),
       ctranslate2Error: (payload['ctranslate2_error'] as String?)?.trim(),

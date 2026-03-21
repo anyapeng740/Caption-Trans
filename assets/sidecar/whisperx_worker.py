@@ -3,8 +3,10 @@
 import contextlib
 import gc
 import json
+import os
 import platform
 import re
+import subprocess
 import sys
 import traceback
 import wave
@@ -44,6 +46,7 @@ JAPANESE_SEGMENTATION_OPTIONS: Dict[str, Any] = {
     "max_segment_chars": 24,
     "min_split_chars": 4,
 }
+CPU_DETECTION_TIMEOUT_SEC = 2.0
 DEFAULT_WHISPERX_VAD_OPTIONS: Dict[str, Any] = {
     "chunk_size": 30,
     "vad_onset": 0.500,
@@ -200,6 +203,14 @@ def normalize_device(value: Any, default: str = "cpu") -> str:
     return device or default
 
 
+def to_positive_int(value: Any) -> Optional[int]:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
 def ensure_mps_available() -> None:
     mps_backend = getattr(torch.backends, "mps", None)
     if mps_backend is None or not mps_backend.is_built():
@@ -225,6 +236,65 @@ def build_effective_vad_options(
     effective = dict(DEFAULT_WHISPERX_VAD_OPTIONS)
     effective.update(vad_options)
     return effective
+
+
+def parse_positive_ints(text: str) -> List[int]:
+    values: List[int] = []
+    for match in re.findall(r"\d+", text):
+        value = to_positive_int(match)
+        if value is not None:
+            values.append(value)
+    return values
+
+
+def read_command_int(command: List[str], sum_matches: bool = False) -> Optional[int]:
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=CPU_DETECTION_TIMEOUT_SEC,
+            check=False,
+        )
+    except Exception:
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    values = parse_positive_ints(result.stdout)
+    if not values:
+        return None
+    if sum_matches or len(values) > 1:
+        return sum(values)
+    return values[0]
+
+
+def detect_physical_cpu_count() -> Optional[int]:
+    system = platform.system().lower()
+
+    if system == "darwin":
+        return read_command_int(["sysctl", "-n", "hw.physicalcpu"])
+
+    if system == "windows":
+        for command in (
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                (
+                    "$value=(Get-CimInstance Win32_Processor | "
+                    "Measure-Object -Property NumberOfCores -Sum).Sum; "
+                    "if ($value) { Write-Output $value }"
+                ),
+            ],
+            ["wmic", "cpu", "get", "NumberOfCores", "/value"],
+        ):
+            value = read_command_int(command, sum_matches=True)
+            if value is not None:
+                return value
+
+    return None
 
 
 def build_segmentation_options(
@@ -834,10 +904,45 @@ def normalize_transcript_segments(
 class WhisperXWorker:
     def __init__(self) -> None:
         self.models: Dict[
-            Tuple[str, str, str, str, Optional[str], str, str], Any
+            Tuple[str, str, str, str, int, Optional[str], str, str], Any
         ] = {}
         self.vad_models: Dict[Tuple[str, str], Any] = {}
         self.align_models: Dict[Tuple[str, str], Tuple[Any, Dict[str, Any]]] = {}
+        self.logical_cpu_count = max(1, int(os.cpu_count() or 1))
+        detected_physical_cpu_count = detect_physical_cpu_count()
+        self.physical_cpu_count = max(
+            1,
+            min(
+                self.logical_cpu_count,
+                int(detected_physical_cpu_count or self.logical_cpu_count),
+            ),
+        )
+        self.recommended_cpu_threads = self.physical_cpu_count
+
+    def resolve_cpu_threads(
+        self,
+        requested_threads: Any,
+        asr_device: str,
+        vad_device: str,
+        align_device: str,
+    ) -> Optional[int]:
+        if "cpu" not in {asr_device, vad_device, align_device}:
+            return None
+
+        override_threads = to_positive_int(requested_threads)
+        if override_threads is not None:
+            return override_threads
+
+        return self.recommended_cpu_threads
+
+    def configure_torch_cpu_threads(self, threads: Optional[int]) -> None:
+        if threads is None:
+            return
+
+        try:
+            torch.set_num_threads(threads)
+        except Exception:
+            return
 
     def clear_device_resources(self, device: Optional[str] = None) -> None:
         if device is None:
@@ -899,6 +1004,7 @@ class WhisperXWorker:
         asr_options: Dict[str, Any],
         vad_options: Dict[str, Any],
         vad_device: Optional[str] = None,
+        cpu_threads: Optional[int] = None,
     ) -> Any:
         resolved_vad_device = normalize_device(vad_device, asr_device)
         use_custom_vad = resolved_vad_device != asr_device
@@ -910,6 +1016,7 @@ class WhisperXWorker:
             asr_device,
             resolved_vad_device,
             compute_type,
+            int(cpu_threads or 0),
             language,
             json.dumps(asr_options, sort_keys=True, ensure_ascii=False),
             json.dumps(effective_vad_options, sort_keys=True, ensure_ascii=False),
@@ -931,6 +1038,8 @@ class WhisperXWorker:
             load_kwargs["vad_model"] = self.get_vad_model(
                 resolved_vad_device, effective_vad_options
             )
+        if asr_device == "cpu" and cpu_threads is not None:
+            load_kwargs["threads"] = cpu_threads
 
         model = whisperx.load_model(
             model_name,
@@ -974,6 +1083,9 @@ class WhisperXWorker:
             "cuda_compute_types": [],
             "mps_built": False,
             "mps_available": False,
+            "logical_cpu_count": self.logical_cpu_count,
+            "physical_cpu_count": self.physical_cpu_count,
+            "recommended_cpu_threads": self.recommended_cpu_threads,
         }
 
         try:
@@ -1022,6 +1134,12 @@ class WhisperXWorker:
         asr_device = normalize_device(params.get("asr_device"), device)
         vad_device = normalize_device(params.get("vad_device"), asr_device)
         align_device = normalize_device(params.get("align_device"), asr_device)
+        cpu_threads = self.resolve_cpu_threads(
+            params.get("cpu_threads"),
+            asr_device=asr_device,
+            vad_device=vad_device,
+            align_device=align_device,
+        )
         compute_type = str(params.get("compute_type") or "int8")
         batch_size = int(params.get("batch_size") or 4)
         no_align = to_bool(params.get("no_align"), False)
@@ -1029,12 +1147,20 @@ class WhisperXWorker:
         vad_options = normalize_options(params.get("vad_options"))
         segmentation_overrides = normalize_options(params.get("segmentation_options"))
 
+        self.configure_torch_cpu_threads(cpu_threads)
+
         emit_status(request_id, "loading_audio")
         emit_progress(request_id, 8)
         audio = load_wav_pcm_s16le(wav_path)
 
         emit_status(request_id, "preparing_model")
         emit_progress(request_id, 20)
+        if asr_device == "cpu" and cpu_threads is not None:
+            emit_log(
+                request_id,
+                f"Using {cpu_threads} CPU threads for Whisper ASR "
+                f"(physical={self.physical_cpu_count}, logical={self.logical_cpu_count})",
+            )
         model_logs = ProgressLogStream(request_id)
         with contextlib.redirect_stdout(model_logs), contextlib.redirect_stderr(
             model_logs
@@ -1047,6 +1173,7 @@ class WhisperXWorker:
                 asr_options=asr_options,
                 vad_options=vad_options,
                 vad_device=vad_device,
+                cpu_threads=cpu_threads,
             )
         model_logs.flush()
 

@@ -423,6 +423,17 @@ class TranscriptionPanel extends StatelessWidget {
                 'batch ${runtimeInfo.batchSize}',
                 Colors.white70,
               ),
+              if (runtimeInfo.physicalCpuCount != null ||
+                  runtimeInfo.logicalCpuCount != null)
+                _buildRuntimeChip(
+                  _buildCpuCountLabel(runtimeInfo),
+                  Colors.white70,
+                ),
+              if (runtimeInfo.recommendedCpuThreads != null)
+                _buildRuntimeChip(
+                  'threads ${runtimeInfo.recommendedCpuThreads}',
+                  Colors.white70,
+                ),
               if (runtimeInfo.torchCudaVersion != null &&
                   runtimeInfo.torchCudaVersion!.trim().isNotEmpty)
                 _buildRuntimeChip(
@@ -453,6 +464,18 @@ class TranscriptionPanel extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _buildCpuCountLabel(WhisperRuntimeInfo runtimeInfo) {
+    final int? physical = runtimeInfo.physicalCpuCount;
+    final int? logical = runtimeInfo.logicalCpuCount;
+    if (physical != null && logical != null) {
+      return 'cpu $physical phys / $logical log';
+    }
+    if (physical != null) {
+      return 'cpu $physical phys';
+    }
+    return 'cpu ${logical!} log';
   }
 
   Widget _buildRuntimeChip(String label, Color color) {

@@ -8,6 +8,9 @@ class WhisperRuntimeInfo extends Equatable {
   final bool usingGpu;
   final bool cudaAvailable;
   final String? torchCudaVersion;
+  final int? logicalCpuCount;
+  final int? physicalCpuCount;
+  final int? recommendedCpuThreads;
   final String? note;
 
   const WhisperRuntimeInfo({
@@ -18,6 +21,9 @@ class WhisperRuntimeInfo extends Equatable {
     required this.usingGpu,
     required this.cudaAvailable,
     required this.torchCudaVersion,
+    required this.logicalCpuCount,
+    required this.physicalCpuCount,
+    required this.recommendedCpuThreads,
     this.note,
   });
 
@@ -28,6 +34,9 @@ class WhisperRuntimeInfo extends Equatable {
         deviceName!.trim(),
       'compute=$computeType',
       'batch=$batchSize',
+      if (physicalCpuCount != null) 'physical CPU $physicalCpuCount',
+      if (logicalCpuCount != null) 'logical CPU $logicalCpuCount',
+      if (recommendedCpuThreads != null) 'threads=$recommendedCpuThreads',
       if (torchCudaVersion != null && torchCudaVersion!.trim().isNotEmpty)
         'torch CUDA ${torchCudaVersion!.trim()}',
     ];
@@ -43,6 +52,9 @@ class WhisperRuntimeInfo extends Equatable {
     usingGpu,
     cudaAvailable,
     torchCudaVersion,
+    logicalCpuCount,
+    physicalCpuCount,
+    recommendedCpuThreads,
     note,
   ];
 }
