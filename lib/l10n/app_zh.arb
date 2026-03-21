@@ -52,6 +52,8 @@
   "enterGeminiModel": "例如：gemini-2.0-flash, gpt-4o",
   "targetLanguage": "目标语言",
   "translate": "翻译",
+  "continueTranslation": "继续翻译",
+  "retranslate": "重新翻译",
   "initializingTranslation": "正在初始化翻译...",
   "translatingProgress": "正在翻译字幕 ({completed}/{total})...",
   "segmentsTranslated": "已翻译 {count} 条字幕为{lang}",

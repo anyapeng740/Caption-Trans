@@ -195,6 +195,118 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  TranslationConfig? _buildCurrentTranslationConfig(
+    TranscriptionState transcriptionState,
+  ) {
+    if (transcriptionState is! TranscriptionComplete) {
+      return null;
+    }
+
+    return TranslationConfig(
+      providerId: _llmProvider,
+      apiKey: _apiKey,
+      baseUrl: _llmBaseUrl,
+      model: _targetModel,
+      sourceLanguage: transcriptionState.result.language,
+      targetLanguage: _targetLanguage,
+      batchSize: _batchSize,
+    );
+  }
+
+  List<SubtitleSegment>? _resolveEffectiveSegments(
+    TranslationState translationState,
+    TranscriptionState transcriptionState,
+  ) {
+    if (translationState is TranslationInProgress &&
+        translationState.partialSegments != null) {
+      return translationState.partialSegments;
+    }
+
+    if (translationState is TranslationComplete) {
+      return translationState.translatedSegments;
+    }
+
+    if (translationState is TranslationCancelled &&
+        translationState.partialSegments != null) {
+      return translationState.partialSegments;
+    }
+
+    if (translationState is TranslationError &&
+        translationState.partialSegments != null) {
+      return translationState.partialSegments;
+    }
+
+    if (transcriptionState is TranscriptionComplete) {
+      return transcriptionState.result.segments;
+    }
+
+    return null;
+  }
+
+  int _countTranslatedSegments(List<SubtitleSegment>? segments) {
+    if (segments == null) {
+      return 0;
+    }
+
+    return segments
+        .where((segment) => segment.translatedText?.trim().isNotEmpty == true)
+        .length;
+  }
+
+  List<SubtitleSegment> _clearTranslatedSegments(
+    List<SubtitleSegment> segments,
+  ) {
+    return segments
+        .map((segment) => segment.copyWith(translatedText: null))
+        .toList();
+  }
+
+  void _persistProjectTranslation(
+    BuildContext context, {
+    required List<SubtitleSegment> segments,
+    TranslationConfig? config,
+  }) {
+    if (_activeProject == null) {
+      return;
+    }
+
+    final updatedResult = _activeProject!.transcription.copyWith(
+      segments: segments,
+    );
+    final updatedProject = _activeProject!.copyWith(
+      transcription: updatedResult,
+      updatedAt: DateTime.now(),
+      translationConfig: config ?? _activeProject!.translationConfig,
+    );
+
+    _activeProject = updatedProject;
+    context.read<ProjectBloc>().add(UpdateProject(updatedProject));
+  }
+
+  void _startTranslation(
+    BuildContext context, {
+    required TranslationState translationState,
+    required TranscriptionState transcriptionState,
+    bool restart = false,
+  }) {
+    final config = _buildCurrentTranslationConfig(transcriptionState);
+    final segments = _resolveEffectiveSegments(
+      translationState,
+      transcriptionState,
+    );
+
+    if (config == null || segments == null) {
+      return;
+    }
+
+    context.read<TranslationBloc>().add(
+      StartTranslation(
+        segments: restart ? _clearTranslatedSegments(segments) : segments,
+        config: config,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -271,6 +383,13 @@ class _HomePageState extends State<HomePage> {
                   const SizedBox(height: 12),
                   BlocConsumer<TranslationBloc, TranslationState>(
                     listener: (context, state) {
+                      final transcriptionState = context
+                          .read<TranscriptionBloc>()
+                          .state;
+                      final currentConfig = _buildCurrentTranslationConfig(
+                        transcriptionState,
+                      );
+
                       if (state is TranslationError) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -278,40 +397,58 @@ class _HomePageState extends State<HomePage> {
                             backgroundColor: Colors.red.shade700,
                           ),
                         );
+                        if (state.partialSegments != null) {
+                          _persistProjectTranslation(
+                            context,
+                            segments: state.partialSegments!,
+                            config: state.config ?? currentConfig,
+                          );
+                        }
                       } else if (state is TranslationInProgress &&
                           state.partialSegments != null) {
-                        if (_activeProject != null) {
-                          final updatedResult = _activeProject!.transcription
-                              .copyWith(segments: state.partialSegments!);
-                          _activeProject = _activeProject!.copyWith(
-                            transcription: updatedResult,
-                            updatedAt: DateTime.now(),
-                          );
-                          context.read<ProjectBloc>().add(
-                            UpdateProject(_activeProject!),
-                          );
-                        }
+                        _persistProjectTranslation(
+                          context,
+                          segments: state.partialSegments!,
+                          config: currentConfig,
+                        );
                       } else if (state is TranslationComplete) {
-                        if (_activeProject != null) {
-                          final updatedResult = _activeProject!.transcription
-                              .copyWith(segments: state.translatedSegments);
-                          _activeProject = _activeProject!.copyWith(
-                            transcription: updatedResult,
-                            updatedAt: DateTime.now(),
-                            translationConfig: state.config,
-                          );
-                          context.read<ProjectBloc>().add(
-                            UpdateProject(_activeProject!),
-                          );
-                        }
+                        _persistProjectTranslation(
+                          context,
+                          segments: state.translatedSegments,
+                          config: state.config,
+                        );
+                      } else if (state is TranslationCancelled &&
+                          state.partialSegments != null) {
+                        _persistProjectTranslation(
+                          context,
+                          segments: state.partialSegments!,
+                          config: state.config ?? currentConfig,
+                        );
                       }
                     },
                     builder: (context, translationState) {
                       return BlocBuilder<TranscriptionBloc, TranscriptionState>(
                         builder: (context, transcriptionState) {
+                          final effectiveSegments = _resolveEffectiveSegments(
+                            translationState,
+                            transcriptionState,
+                          );
+                          final translatedSegmentCount =
+                              _countTranslatedSegments(effectiveSegments);
+                          final totalSegmentCount =
+                              effectiveSegments?.length ?? 0;
+                          final hasPartialTranslation =
+                              translatedSegmentCount > 0 &&
+                              translatedSegmentCount < totalSegmentCount;
+                          final isFullyTranslated =
+                              totalSegmentCount > 0 &&
+                              translatedSegmentCount == totalSegmentCount;
+
                           return TranslationPanel(
                             transcriptionState: transcriptionState,
                             translationState: translationState,
+                            translatedSegmentCount: translatedSegmentCount,
+                            totalSegmentCount: totalSegmentCount,
                             llmProvider: _llmProvider,
                             llmBaseUrl: _llmBaseUrl,
                             onLlmProviderChanged: (provider) {
@@ -347,25 +484,23 @@ class _HomePageState extends State<HomePage> {
                               widget.settingsService.setBatchSize(size);
                             },
                             onStartTranslation: () {
-                              if (transcriptionState is TranscriptionComplete) {
-                                context.read<TranslationBloc>().add(
-                                  StartTranslation(
-                                    segments:
-                                        transcriptionState.result.segments,
-                                    config: TranslationConfig(
-                                      providerId: _llmProvider,
-                                      apiKey: _apiKey,
-                                      baseUrl: _llmBaseUrl,
-                                      model: _targetModel,
-                                      sourceLanguage:
-                                          transcriptionState.result.language,
-                                      targetLanguage: _targetLanguage,
-                                      batchSize: _batchSize,
-                                    ),
-                                  ),
-                                );
-                              }
+                              _startTranslation(
+                                context,
+                                translationState: translationState,
+                                transcriptionState: transcriptionState,
+                              );
                             },
+                            onRestartTranslation:
+                                hasPartialTranslation || isFullyTranslated
+                                ? () {
+                                    _startTranslation(
+                                      context,
+                                      translationState: translationState,
+                                      transcriptionState: transcriptionState,
+                                      restart: true,
+                                    );
+                                  }
+                                : null,
                             onCancelTranslation: () {
                               context.read<TranslationBloc>().add(
                                 const CancelTranslation(),
@@ -511,63 +646,28 @@ class _HomePageState extends State<HomePage> {
       builder: (context, translationState) {
         return BlocBuilder<TranscriptionBloc, TranscriptionState>(
           builder: (context, transcriptionState) {
-            List<SubtitleSegment>? segments;
-            bool hasTranslation = false;
-
-            if (translationState is TranslationInProgress &&
-                translationState.partialSegments != null) {
-              segments = translationState.partialSegments;
-              hasTranslation =
-                  segments != null &&
-                  segments.any((s) => s.translatedText?.isNotEmpty == true);
-            } else if (translationState is TranslationComplete) {
-              segments = translationState.translatedSegments;
-              hasTranslation = true;
-            } else if (translationState is TranslationCancelled) {
-              segments = translationState.partialSegments;
-              hasTranslation =
-                  segments != null &&
-                  segments.any((s) => s.translatedText?.isNotEmpty == true);
-            } else if (transcriptionState is TranscriptionComplete) {
-              segments = transcriptionState.result.segments;
-              // Check if the loaded project naturally has translations
-              hasTranslation = segments.any(
-                (s) => s.translatedText?.isNotEmpty == true,
-              );
-            }
+            final segments = _resolveEffectiveSegments(
+              translationState,
+              transcriptionState,
+            );
+            final hasTranslation = _countTranslatedSegments(segments) > 0;
 
             return SubtitlePreview(
               segments: segments,
-              hasTranslation:
-                  hasTranslation || translationState is TranslationComplete,
+              hasTranslation: hasTranslation,
               bilingual: _bilingual,
               onBilingualChanged: (v) {
                 setState(() => _bilingual = v);
                 widget.settingsService.setBilingual(v);
               },
               onExportOriginal: segments != null
-                  ? () => _exportSrt(
-                      context,
-                      segments!.cast<dynamic>(),
-                      false,
-                      false,
-                    )
+                  ? () => _exportSrt(context, segments, false, false)
                   : null,
               onExportTranslated: hasTranslation && segments != null
-                  ? () => _exportSrt(
-                      context,
-                      segments!.cast<dynamic>(),
-                      true,
-                      false,
-                    )
+                  ? () => _exportSrt(context, segments, true, false)
                   : null,
               onExportBilingual: hasTranslation && segments != null
-                  ? () => _exportSrt(
-                      context,
-                      segments!.cast<dynamic>(),
-                      false,
-                      true,
-                    )
+                  ? () => _exportSrt(context, segments, false, true)
                   : null,
             );
           },
@@ -604,14 +704,14 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _exportSrt(
     BuildContext context,
-    List<dynamic> segments,
+    List<SubtitleSegment> segments,
     bool translatedOnly,
     bool bilingual,
   ) async {
     final l10n = AppLocalizations.of(context)!;
     try {
       final srtContent = SrtParser.generate(
-        segments.cast(),
+        segments,
         useTranslation: translatedOnly,
         bilingual: bilingual,
       );
@@ -864,10 +964,15 @@ class _HomePageState extends State<HomePage> {
       _activeProject = project;
       _sourceVideoLanguage = project.sourceVideoLanguage;
       if (project.translationConfig != null) {
-        _targetLanguage = project.translationConfig!.targetLanguage;
-        // Restore other config if needed
-        if (project.translationConfig!.model != null) {
-          _targetModel = project.translationConfig!.model!;
+        final config = project.translationConfig!;
+        _llmProvider = config.providerId;
+        _llmBaseUrl = config.baseUrl;
+        _apiKey = config.apiKey;
+        _targetLanguage = config.targetLanguage;
+        _batchSize = config.batchSize;
+        _availableModels = config.model != null ? [config.model!] : [];
+        if (config.model != null) {
+          _targetModel = config.model!;
         }
       }
     });

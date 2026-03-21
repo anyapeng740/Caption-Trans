@@ -171,6 +171,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translate => 'Translate';
 
   @override
+  String get continueTranslation => 'Continue Translation';
+
+  @override
+  String get retranslate => 'Retranslate';
+
+  @override
   String get initializingTranslation => 'Initializing translation...';
 
   @override

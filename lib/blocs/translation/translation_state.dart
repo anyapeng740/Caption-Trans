@@ -53,22 +53,30 @@ class TranslationComplete extends TranslationState {
 class TranslationCancelled extends TranslationState {
   final String message;
   final List<SubtitleSegment>? partialSegments;
+  final TranslationConfig? config;
 
   const TranslationCancelled({
     this.message = 'Translation cancelled',
     this.partialSegments,
+    this.config,
   });
 
   @override
-  List<Object?> get props => [message, partialSegments];
+  List<Object?> get props => [message, partialSegments, config];
 }
 
 /// Translation failed.
 class TranslationError extends TranslationState {
   final String message;
+  final List<SubtitleSegment>? partialSegments;
+  final TranslationConfig? config;
 
-  const TranslationError({required this.message});
+  const TranslationError({
+    required this.message,
+    this.partialSegments,
+    this.config,
+  });
 
   @override
-  List<Object?> get props => [message];
+  List<Object?> get props => [message, partialSegments, config];
 }

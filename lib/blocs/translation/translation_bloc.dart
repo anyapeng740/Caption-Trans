@@ -1,4 +1,3 @@
-import 'package:caption_trans/models/subtitle_segment.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../services/translation/translation_provider.dart';
 import '../../services/translation/translation_service.dart';
@@ -21,11 +20,14 @@ class TranslationBloc extends Bloc<TranslationEvent, TranslationState> {
     StartTranslation event,
     Emitter<TranslationState> emit,
   ) async {
+    var latestPartials = event.segments;
+
     try {
       emit(
         TranslationInProgress(
           completed: 0,
           total: event.segments.length,
+          partialSegments: latestPartials,
           statusMessage: 'Initializing translation...',
         ),
       );
@@ -38,6 +40,7 @@ class TranslationBloc extends Bloc<TranslationEvent, TranslationState> {
         segments: event.segments,
         config: event.config,
         onProgress: (completed, total, partials) {
+          latestPartials = partials;
           if (!emit.isDone) {
             emit(
               TranslationInProgress(
@@ -59,19 +62,24 @@ class TranslationBloc extends Bloc<TranslationEvent, TranslationState> {
       );
     } on TranslationAbortedException catch (e) {
       if (!emit.isDone) {
-        List<SubtitleSegment>? latestPartials;
-        if (state is TranslationInProgress) {
-          latestPartials = (state as TranslationInProgress).partialSegments;
-        }
         emit(
           TranslationCancelled(
             message: e.message,
-            partialSegments: latestPartials ?? event.segments,
+            partialSegments: latestPartials,
+            config: event.config,
           ),
         );
       }
     } catch (e) {
-      emit(TranslationError(message: e.toString()));
+      if (!emit.isDone) {
+        emit(
+          TranslationError(
+            message: e.toString(),
+            partialSegments: latestPartials,
+            config: event.config,
+          ),
+        );
+      }
     }
   }
 
@@ -80,9 +88,7 @@ class TranslationBloc extends Bloc<TranslationEvent, TranslationState> {
     Emitter<TranslationState> emit,
   ) {
     if (state is TranslationInProgress) {
-      final s = state as TranslationInProgress;
       _translationService.cancel();
-      emit(TranslationCancelled(partialSegments: s.partialSegments));
     }
   }
 

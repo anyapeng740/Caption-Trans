@@ -410,6 +410,18 @@ abstract class AppLocalizations {
   /// **'Translate'**
   String get translate;
 
+  /// No description provided for @continueTranslation.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue Translation'**
+  String get continueTranslation;
+
+  /// No description provided for @retranslate.
+  ///
+  /// In en, this message translates to:
+  /// **'Retranslate'**
+  String get retranslate;
+
   /// No description provided for @initializingTranslation.
   ///
   /// In en, this message translates to:

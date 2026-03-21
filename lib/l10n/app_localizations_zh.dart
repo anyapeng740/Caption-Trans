@@ -167,6 +167,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translate => '翻译';
 
   @override
+  String get continueTranslation => '继续翻译';
+
+  @override
+  String get retranslate => '重新翻译';
+
+  @override
   String get initializingTranslation => '正在初始化翻译...';
 
   @override

@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+const Object _translatedTextNotSet = Object();
+
 /// A single subtitle segment with timing and text content.
 class SubtitleSegment extends Equatable {
   final int index;
@@ -21,14 +23,16 @@ class SubtitleSegment extends Equatable {
     Duration? startTime,
     Duration? endTime,
     String? text,
-    String? translatedText,
+    Object? translatedText = _translatedTextNotSet,
   }) {
     return SubtitleSegment(
       index: index ?? this.index,
       startTime: startTime ?? this.startTime,
       endTime: endTime ?? this.endTime,
       text: text ?? this.text,
-      translatedText: translatedText ?? this.translatedText,
+      translatedText: identical(translatedText, _translatedTextNotSet)
+          ? this.translatedText
+          : translatedText as String?,
     );
   }
 

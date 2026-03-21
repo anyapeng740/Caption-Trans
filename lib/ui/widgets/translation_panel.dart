@@ -23,6 +23,8 @@ const Map<String, String> defaultLlmBaseUrls = {
 class TranslationPanel extends StatelessWidget {
   final TranscriptionState transcriptionState;
   final TranslationState translationState;
+  final int translatedSegmentCount;
+  final int totalSegmentCount;
   final String targetLanguage;
   final String llmProvider;
   final String llmBaseUrl;
@@ -39,12 +41,15 @@ class TranslationPanel extends StatelessWidget {
   final ValueChanged<int> onBatchSizeChanged;
   final VoidCallback onCheckModels;
   final VoidCallback onStartTranslation;
+  final VoidCallback? onRestartTranslation;
   final VoidCallback onCancelTranslation;
 
   const TranslationPanel({
     super.key,
     required this.transcriptionState,
     required this.translationState,
+    required this.translatedSegmentCount,
+    required this.totalSegmentCount,
     required this.targetLanguage,
     required this.llmProvider,
     required this.llmBaseUrl,
@@ -61,6 +66,7 @@ class TranslationPanel extends StatelessWidget {
     required this.onBatchSizeChanged,
     required this.onCheckModels,
     required this.onStartTranslation,
+    this.onRestartTranslation,
     required this.onCancelTranslation,
   });
 
@@ -318,10 +324,9 @@ class TranslationPanel extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final controls = Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: targetLanguage,
                     decoration: const InputDecoration(
@@ -348,10 +353,28 @@ class TranslationPanel extends StatelessWidget {
                             if (v != null) onTargetLanguageChanged(v);
                           },
                   ),
-                ),
-                const SizedBox(width: 16),
-                _buildStartButton(context, l10n),
-              ],
+                );
+                final actions = _buildActionButtons(context, l10n);
+                final useStackedLayout =
+                    constraints.maxWidth < 720 &&
+                    (_hasPartialTranslation || _isFullyTranslated);
+
+                if (useStackedLayout) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [controls]),
+                      const SizedBox(height: 12),
+                      Align(alignment: Alignment.centerRight, child: actions),
+                    ],
+                  );
+                }
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [controls, const SizedBox(width: 16), actions],
+                );
+              },
             ),
             if (_isTranslating ||
                 translationState is TranslationComplete ||
@@ -368,6 +391,11 @@ class TranslationPanel extends StatelessWidget {
   }
 
   bool get _isTranslating => translationState is TranslationInProgress;
+  bool get _hasAnyTranslation => translatedSegmentCount > 0;
+  bool get _hasPartialTranslation =>
+      _hasAnyTranslation && translatedSegmentCount < totalSegmentCount;
+  bool get _isFullyTranslated =>
+      totalSegmentCount > 0 && translatedSegmentCount == totalSegmentCount;
 
   bool get _canStart =>
       transcriptionState is TranscriptionComplete &&
@@ -386,7 +414,7 @@ class TranslationPanel extends StatelessWidget {
     return '${model.substring(0, head)}...${model.substring(model.length - tail)}';
   }
 
-  Widget _buildStartButton(BuildContext context, AppLocalizations l10n) {
+  Widget _buildActionButtons(BuildContext context, AppLocalizations l10n) {
     if (_isTranslating) {
       final errorColor = Theme.of(context).colorScheme.error;
       return OutlinedButton.icon(
@@ -397,6 +425,30 @@ class TranslationPanel extends StatelessWidget {
           side: BorderSide(color: errorColor.withValues(alpha: 0.6)),
         ),
         label: Text(l10n.cancel),
+      );
+    }
+
+    if (_hasPartialTranslation) {
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          FilledButton(
+            onPressed: _canStart ? onStartTranslation : null,
+            child: Text(l10n.continueTranslation),
+          ),
+          OutlinedButton(
+            onPressed: _canStart ? onRestartTranslation : null,
+            child: Text(l10n.retranslate),
+          ),
+        ],
+      );
+    }
+
+    if (_isFullyTranslated) {
+      return OutlinedButton(
+        onPressed: _canStart ? onRestartTranslation : null,
+        child: Text(l10n.retranslate),
       );
     }
 
