@@ -4,20 +4,15 @@ import 'package:caption_trans/l10n/app_localizations.dart';
 /// Card for selecting a media file with drag-and-drop style UI.
 class VideoPickerCard extends StatelessWidget {
   static const double _desktopCardHeight = 175;
-  static const double _desktopCardHeightWithAction = 208;
 
   final String? selectedFileName;
   final VoidCallback onPickVideo;
-  final VoidCallback? onOpenSubtitleBatch;
-  final VoidCallback? onOpenAListAudioConvert;
   final VoidCallback? onClear;
 
   const VideoPickerCard({
     super.key,
     this.selectedFileName,
     required this.onPickVideo,
-    this.onOpenSubtitleBatch,
-    this.onOpenAListAudioConvert,
     this.onClear,
   });
 
@@ -28,8 +23,6 @@ class VideoPickerCard extends StatelessWidget {
     final platform = theme.platform;
     final isMobilePlatform =
         platform == TargetPlatform.iOS || platform == TargetPlatform.android;
-    final hasExtraAction =
-        onOpenSubtitleBatch != null || onOpenAListAudioConvert != null;
 
     return Card(
       margin: EdgeInsets.zero,
@@ -37,9 +30,7 @@ class VideoPickerCard extends StatelessWidget {
         width: double.infinity,
         height: isMobilePlatform
             ? null
-            : (hasExtraAction
-                  ? _desktopCardHeightWithAction
-                  : _desktopCardHeight),
+            : _desktopCardHeight,
         child: InkWell(
           onTap: onPickVideo,
           borderRadius: BorderRadius.circular(16),
@@ -87,44 +78,6 @@ class VideoPickerCard extends StatelessWidget {
             color: Colors.white.withValues(alpha: 0.5),
           ),
         ),
-        if (onOpenSubtitleBatch != null || onOpenAListAudioConvert != null) ...[
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.center,
-            children: [
-              if (onOpenSubtitleBatch != null)
-                OutlinedButton.icon(
-                  onPressed: onOpenSubtitleBatch,
-                  icon: const Icon(Icons.subtitles_rounded),
-                  label: const Text('批量字幕'),
-                  style: OutlinedButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    minimumSize: const Size(0, 30),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                  ),
-                ),
-              if (onOpenAListAudioConvert != null)
-                OutlinedButton.icon(
-                  onPressed: onOpenAListAudioConvert,
-                  icon: const Icon(Icons.audiotrack_rounded),
-                  label: const Text('AList 转音频'),
-                  style: OutlinedButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    minimumSize: const Size(0, 30),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
       ],
     );
   }
@@ -180,18 +133,6 @@ class VideoPickerCard extends StatelessWidget {
           onPressed: onPickVideo,
           tooltip: l10n.changeFile,
         ),
-        if (onOpenSubtitleBatch != null)
-          IconButton(
-            icon: const Icon(Icons.subtitles_rounded),
-            onPressed: onOpenSubtitleBatch,
-            tooltip: '本地批量字幕',
-          ),
-        if (onOpenAListAudioConvert != null)
-          IconButton(
-            icon: const Icon(Icons.audiotrack_rounded),
-            onPressed: onOpenAListAudioConvert,
-            tooltip: 'AList 转音频',
-          ),
       ],
     );
   }

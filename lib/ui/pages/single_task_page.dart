@@ -5,60 +5,57 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import '../services/settings_service.dart';
-import '../services/translation/translation_failure.dart';
-import '../services/translation/translation_service.dart';
-import '../blocs/transcription/transcription_bloc.dart';
-import '../blocs/transcription/transcription_event.dart';
-import '../blocs/transcription/transcription_state.dart';
-import '../blocs/translation/translation_bloc.dart';
-import '../blocs/translation/translation_event.dart';
-import '../blocs/translation/translation_state.dart';
-import '../core/constants.dart';
+import '../../services/settings_service.dart';
+import '../../services/translation/translation_failure.dart';
+import '../../services/translation/translation_service.dart';
+import '../../blocs/transcription/transcription_bloc.dart';
+import '../../blocs/transcription/transcription_event.dart';
+import '../../blocs/transcription/transcription_state.dart';
+import '../../blocs/translation/translation_bloc.dart';
+import '../../blocs/translation/translation_event.dart';
+import '../../blocs/translation/translation_state.dart';
+import '../../core/constants.dart';
 import 'package:caption_trans/l10n/app_localizations.dart';
-import '../core/utils/srt_parser.dart';
-import '../models/translation_config.dart';
-import '../models/whisper_download_source.dart';
-import 'widgets/download_source_dialog.dart';
-import 'widgets/video_picker_card.dart';
-import 'widgets/transcription_panel.dart';
-import 'widgets/translation_panel.dart';
-import 'widgets/subtitle_preview.dart';
-import 'widgets/settings_dialog.dart';
-import 'widgets/alist_audio_converter_dialog.dart';
-import 'project_list_page.dart';
-import '../models/project.dart';
+import '../../core/utils/srt_parser.dart';
+import '../../models/translation_config.dart';
+import '../../models/whisper_download_source.dart';
+import '../widgets/download_source_dialog.dart';
+import '../widgets/video_picker_card.dart';
+import '../widgets/transcription_panel.dart';
+import '../widgets/translation_panel.dart';
+import '../widgets/subtitle_preview.dart';
+import '../project_list_page.dart';
+import '../../models/project.dart';
 import 'package:uuid/uuid.dart';
-import '../blocs/project/project_bloc.dart';
-import '../blocs/project/project_event.dart';
-import '../blocs/project/project_state.dart';
-import '../models/subtitle_segment.dart';
-import '../services/update_service.dart';
-import '../services/alist/alist_service.dart';
-import '../services/alist/alist_audio_task_manager.dart';
-import '../services/subtitle/subtitle_batch_task_manager.dart';
-import 'widgets/update_dialog.dart';
-import 'widgets/background_job_center_dialog.dart';
-import 'widgets/subtitle_batch_dialog.dart';
+import '../../blocs/project/project_bloc.dart';
+import '../../blocs/project/project_event.dart';
+import '../../blocs/project/project_state.dart';
+import '../../models/subtitle_segment.dart';
+import '../../services/update_service.dart';
+import '../../services/alist/alist_service.dart';
+import '../../services/alist/alist_audio_task_manager.dart';
+import '../../services/subtitle/subtitle_batch_task_manager.dart';
+import '../widgets/update_dialog.dart';
+import '../widgets/background_job_center_dialog.dart';
 
 enum _AListUploadMode { original, translated, bilingual }
 
 /// Main application page with step-by-step workflow.
-class HomePage extends StatefulWidget {
+class SingleTaskPage extends StatefulWidget {
   final void Function(Locale) onLocaleChanged;
   final SettingsService settingsService;
 
-  const HomePage({
+  const SingleTaskPage({
     super.key,
     required this.onLocaleChanged,
     required this.settingsService,
   });
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<SingleTaskPage> createState() => _SingleTaskPageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _SingleTaskPageState extends State<SingleTaskPage> {
   String _selectedModel = AppConstants.defaultWhisperModel;
   String _sourceVideoLanguage = 'ja';
   String _targetLanguage = 'zh';
@@ -402,11 +399,6 @@ class _HomePageState extends State<HomePage> {
                         icon: Icons.video_library_rounded,
                         title: '第 1 步：${l10n.stepSelectVideo}',
                         number: '1',
-                        trailing: IconButton(
-                          icon: const Icon(Icons.settings_rounded),
-                          onPressed: () => _showSettings(context),
-                          tooltip: l10n.settings,
-                        ),
                       ),
                       const SizedBox(height: 12),
                       _buildStepOnePanels(isMobilePlatform),
@@ -788,8 +780,6 @@ class _HomePageState extends State<HomePage> {
         return VideoPickerCard(
           selectedFileName: _getFileName(state),
           onPickVideo: () => _pickVideo(context),
-          onOpenSubtitleBatch: () => _openSubtitleBatchDialog(context),
-          onOpenAListAudioConvert: () => _openAListAudioConverter(context),
           onClear: state is! TranscriptionInitial
               ? () => context.read<TranscriptionBloc>().add(
                   const ResetTranscription(),
@@ -913,20 +903,6 @@ class _HomePageState extends State<HomePage> {
         context.read<TranslationBloc>().add(const ResetTranslation());
       }
     }
-  }
-
-  Future<void> _openSubtitleBatchDialog(BuildContext context) async {
-    await showSubtitleBatchDialog(
-      context,
-      settingsService: widget.settingsService,
-    );
-  }
-
-  Future<void> _openAListAudioConverter(BuildContext context) async {
-    await showAListAudioConverterDialog(
-      context,
-      settingsService: widget.settingsService,
-    );
   }
 
   Future<bool> _ensureDownloadSourceSelected(BuildContext context) async {
@@ -1218,26 +1194,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _showSettings(BuildContext context) {
-    final locale = Localizations.localeOf(context);
-    showDialog(
-      context: context,
-      builder: (_) => SettingsDialog(
-        currentLocale: locale,
-        onLocaleChanged: widget.onLocaleChanged,
-        providerCredentials: _savedProviderCredentials,
-        settingsService: widget.settingsService,
-        onDeleteProviderCredential: (provider) async {
-          await widget.settingsService.deleteLlmProviderCredential(provider);
-          if (!mounted) return;
-
-          setState(() {
-            _savedProviderCredentials.remove(provider);
-          });
-        },
-      ),
-    );
-  }
 
   Widget _buildEmbeddedProjectList() {
     final l10n = AppLocalizations.of(context)!;

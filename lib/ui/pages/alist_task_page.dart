@@ -6,32 +6,20 @@ import 'package:caption_trans/services/settings_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
-import 'background_job_center_dialog.dart';
+import '../widgets/background_job_center_dialog.dart';
 
-Future<void> showAListAudioConverterDialog(
-  BuildContext context, {
-  required SettingsService settingsService,
-}) {
-  return showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) =>
-        _AListAudioConverterDialog(settingsService: settingsService),
-  );
-}
-
-class _AListAudioConverterDialog extends StatefulWidget {
+class AListTaskPage extends StatefulWidget {
   final SettingsService settingsService;
 
-  const _AListAudioConverterDialog({required this.settingsService});
+  const AListTaskPage({super.key, required this.settingsService});
 
   @override
-  State<_AListAudioConverterDialog> createState() =>
-      _AListAudioConverterDialogState();
+  State<AListTaskPage> createState() =>
+      _AListTaskPageState();
 }
 
-class _AListAudioConverterDialogState
-    extends State<_AListAudioConverterDialog> {
+class _AListTaskPageState
+    extends State<AListTaskPage> {
   final AListService _alist = AListService();
 
   late final TextEditingController _baseUrlController;
@@ -371,7 +359,6 @@ class _AListAudioConverterDialogState
     }
 
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    final NavigatorState navigator = Navigator.of(context);
     await _persistSettings();
     await AListAudioTaskManager.instance.enqueueBatch(
       baseUrl: _baseUrlController.text.trim(),
@@ -383,7 +370,6 @@ class _AListAudioConverterDialogState
       remotePaths: targets,
     );
     if (!mounted) return;
-    navigator.pop();
     messenger.showSnackBar(
       const SnackBar(content: Text('已加入后台任务，可通过悬浮球查看进度。')),
     );
@@ -401,79 +387,73 @@ class _AListAudioConverterDialogState
     final ThemeData theme = Theme.of(context);
     final bool busy = _connecting || _loadingRoot;
 
-    return Dialog(
-      insetPadding: const EdgeInsets.all(18),
-      child: SizedBox(
-        width: 1180,
-        height: 740,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Row(
             children: <Widget>[
-              Row(
-                children: <Widget>[
-                  Icon(
-                    Icons.audiotrack_rounded,
-                    color: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      'AList 批量转音频',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: busy
-                        ? null
-                        : () async {
-                            await _persistSettings();
-                            if (!context.mounted) return;
-                            Navigator.of(context).pop();
-                          },
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
+              Icon(
+                Icons.audiotrack_rounded,
+                color: theme.colorScheme.primary,
+                size: 28,
               ),
-              const SizedBox(height: 10),
-              _buildConnectPanel(theme, busy),
-              if (_errorMessage != null) ...<Widget>[
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    _errorMessage!,
-                    style: TextStyle(color: theme.colorScheme.error),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'AList 批量转音频',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 24,
                   ),
                 ),
-              ],
-              const SizedBox(height: 12),
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    Expanded(flex: 3, child: _buildFileTreePanel(theme, busy)),
-                    const SizedBox(width: 12),
-                    Expanded(flex: 2, child: _buildConvertPanel(theme, busy)),
-                  ],
+              ),
+              OutlinedButton.icon(
+                onPressed: () => showBackgroundJobCenterDialog(
+                  context,
+                  initialTab: BackgroundJobTab.audio,
                 ),
+                icon: const Icon(Icons.bubble_chart_rounded),
+                label: const Text('任务中心'),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 24),
+          _buildConnectPanel(theme, busy),
+          if (_errorMessage != null) ...<Widget>[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _errorMessage!,
+                style: TextStyle(color: theme.colorScheme.error, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Expanded(flex: 3, child: _buildFileTreePanel(theme, busy)),
+                const SizedBox(width: 16),
+                Expanded(flex: 2, child: _buildConvertPanel(theme, busy)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildConnectPanel(ThemeData theme, bool busy) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         children: <Widget>[
@@ -564,10 +544,11 @@ class _AListAudioConverterDialogState
 
   Widget _buildFileTreePanel(ThemeData theme, bool busy) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -737,10 +718,11 @@ class _AListAudioConverterDialogState
   Widget _buildConvertPanel(ThemeData theme, bool busy) {
     final AListAudioTaskManager manager = AListAudioTaskManager.instance;
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

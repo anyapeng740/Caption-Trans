@@ -7,7 +7,7 @@ import 'blocs/project/project_bloc.dart';
 import 'blocs/project/project_event.dart';
 import 'package:caption_trans/l10n/app_localizations.dart';
 import 'services/settings_service.dart';
-import 'ui/home_page.dart';
+import 'ui/main_layout.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,7 +55,7 @@ class _CaptionTransAppState extends State<CaptionTransApp> {
           GlobalCupertinoLocalizations.delegate,
         ],
         theme: _buildDarkTheme(),
-        home: HomePage(
+        home: MainLayout(
           onLocaleChanged: _setLocale,
           settingsService: widget.settingsService,
         ),

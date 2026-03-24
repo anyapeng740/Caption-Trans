@@ -10,30 +10,19 @@ import '../../services/settings_service.dart';
 import '../../services/subtitle/subtitle_batch_path_planner.dart';
 import '../../services/subtitle/subtitle_batch_task_manager.dart';
 import '../../services/translation/translation_service.dart';
-import 'background_job_center_dialog.dart';
-import 'translation_panel.dart' show defaultLlmBaseUrls;
+import '../widgets/background_job_center_dialog.dart';
+import '../widgets/translation_panel.dart' show defaultLlmBaseUrls;
 
-Future<void> showSubtitleBatchDialog(
-  BuildContext context, {
-  required SettingsService settingsService,
-}) {
-  return showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => _SubtitleBatchDialog(settingsService: settingsService),
-  );
-}
-
-class _SubtitleBatchDialog extends StatefulWidget {
-  const _SubtitleBatchDialog({required this.settingsService});
+class BatchTaskPage extends StatefulWidget {
+  const BatchTaskPage({super.key, required this.settingsService});
 
   final SettingsService settingsService;
 
   @override
-  State<_SubtitleBatchDialog> createState() => _SubtitleBatchDialogState();
+  State<BatchTaskPage> createState() => _BatchTaskPageState();
 }
 
-class _SubtitleBatchDialogState extends State<_SubtitleBatchDialog> {
+class _BatchTaskPageState extends State<BatchTaskPage> {
   late final TextEditingController _inputRootController;
   late final TextEditingController _outputRootController;
   late final TextEditingController _searchController;
@@ -626,7 +615,6 @@ class _SubtitleBatchDialogState extends State<_SubtitleBatchDialog> {
     );
 
     if (!mounted) return;
-    navigator.pop();
     messenger.showSnackBar(
       SnackBar(
         content: Text('已将 ${selectedFiles.length} 个文件加入后台任务。'),
@@ -643,10 +631,11 @@ class _SubtitleBatchDialogState extends State<_SubtitleBatchDialog> {
 
   Widget _buildToolbar(ThemeData theme) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         children: <Widget>[
@@ -742,10 +731,11 @@ class _SubtitleBatchDialogState extends State<_SubtitleBatchDialog> {
     ).where(_matchesVisibleFile).length;
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -936,10 +926,11 @@ class _SubtitleBatchDialogState extends State<_SubtitleBatchDialog> {
         : '$_selectedModel · $_sourceLanguage · 仅识别原文';
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1069,10 +1060,11 @@ class _SubtitleBatchDialogState extends State<_SubtitleBatchDialog> {
   Widget _buildConfigPanel(ThemeData theme) {
     final SubtitleBatchTaskManager manager = SubtitleBatchTaskManager.instance;
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1391,78 +1383,64 @@ class _SubtitleBatchDialogState extends State<_SubtitleBatchDialog> {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    return Dialog(
-      insetPadding: const EdgeInsets.all(16),
-      child: SizedBox(
-        width: 1460,
-        height: 860,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Row(
             children: <Widget>[
-              Row(
-                children: <Widget>[
-                  Icon(
-                    Icons.subtitles_rounded,
-                    color: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      '本地目录批量字幕',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => showBackgroundJobCenterDialog(
-                      context,
-                      initialTab: BackgroundJobTab.subtitles,
-                    ),
-                    icon: const Icon(Icons.bubble_chart_rounded),
-                    label: const Text('任务中心'),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    onPressed: () async {
-                      await _persistSettings();
-                      if (!context.mounted) return;
-                      Navigator.of(context).pop();
-                    },
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
+              Icon(
+                Icons.subtitles_rounded,
+                color: theme.colorScheme.primary,
+                size: 28,
               ),
-              const SizedBox(height: 10),
-              _buildToolbar(theme),
-              if (_errorMessage != null) ...<Widget>[
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    _errorMessage!,
-                    style: TextStyle(color: theme.colorScheme.error),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  '本地目录批量字幕',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 24,
                   ),
                 ),
-              ],
-              const SizedBox(height: 12),
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    Expanded(flex: 3, child: _buildFileBrowserPanel(theme)),
-                    const SizedBox(width: 12),
-                    Expanded(flex: 2, child: _buildQueuePanel(theme)),
-                    const SizedBox(width: 12),
-                    Expanded(flex: 2, child: _buildConfigPanel(theme)),
-                  ],
+              ),
+              OutlinedButton.icon(
+                onPressed: () => showBackgroundJobCenterDialog(
+                  context,
+                  initialTab: BackgroundJobTab.subtitles,
                 ),
+                icon: const Icon(Icons.bubble_chart_rounded),
+                label: const Text('任务中心'),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 24),
+          _buildToolbar(theme),
+          if (_errorMessage != null) ...<Widget>[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _errorMessage!,
+                style: TextStyle(color: theme.colorScheme.error, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Expanded(flex: 3, child: _buildFileBrowserPanel(theme)),
+                const SizedBox(width: 16),
+                Expanded(flex: 2, child: _buildQueuePanel(theme)),
+                const SizedBox(width: 16),
+                Expanded(flex: 2, child: _buildConfigPanel(theme)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
