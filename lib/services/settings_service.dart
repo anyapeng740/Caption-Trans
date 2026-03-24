@@ -32,6 +32,16 @@ class SettingsService {
   static const String _keyBatchSize = 'batch_size';
   static const String _keyLastUpdateCheckAt = 'last_update_check_at';
   static const String _keyWhisperDownloadSource = 'whisper_download_source';
+  static const String _keyAListBaseUrl = 'alist_base_url';
+  static const String _keyAListUsername = 'alist_username';
+  static const String _keyAListPassword = 'alist_password';
+  static const String _keyAListBrowsePath = 'alist_browse_path';
+  static const String _keyAListUploadRemoteBase = 'alist_upload_remote_base';
+  static const String _keyAListAudioOutputDir = 'alist_audio_output_dir';
+  static const String _keyAListAudioFormat = 'alist_audio_format';
+  static const String _keyAListAudioConcurrency = 'alist_audio_concurrency';
+  static const String _keyAListMinVideoSizeMB = 'alist_min_video_size_mb';
+  static const String _keyAListBlockedVideoNames = 'alist_blocked_video_names';
 
   final SharedPreferences _prefs;
 
@@ -99,6 +109,52 @@ class SettingsService {
 
   Future<void> clearWhisperDownloadSource() =>
       _prefs.remove(_keyWhisperDownloadSource);
+
+  String get alistBaseUrl => _prefs.getString(_keyAListBaseUrl) ?? '';
+  Future<void> setAListBaseUrl(String value) =>
+      _prefs.setString(_keyAListBaseUrl, value);
+
+  String get alistUsername => _prefs.getString(_keyAListUsername) ?? '';
+  Future<void> setAListUsername(String value) =>
+      _prefs.setString(_keyAListUsername, value);
+
+  String get alistPassword => _prefs.getString(_keyAListPassword) ?? '';
+  Future<void> setAListPassword(String value) =>
+      _prefs.setString(_keyAListPassword, value);
+
+  String get alistBrowsePath => _prefs.getString(_keyAListBrowsePath) ?? '/';
+  Future<void> setAListBrowsePath(String value) =>
+      _prefs.setString(_keyAListBrowsePath, value);
+
+  String get alistUploadRemoteBase =>
+      _prefs.getString(_keyAListUploadRemoteBase) ?? '/';
+  Future<void> setAListUploadRemoteBase(String value) =>
+      _prefs.setString(_keyAListUploadRemoteBase, value);
+
+  String get alistAudioOutputDir =>
+      _prefs.getString(_keyAListAudioOutputDir) ?? '';
+  Future<void> setAListAudioOutputDir(String value) =>
+      _prefs.setString(_keyAListAudioOutputDir, value);
+
+  String get alistAudioFormat =>
+      _prefs.getString(_keyAListAudioFormat) ?? 'flac';
+  Future<void> setAListAudioFormat(String value) =>
+      _prefs.setString(_keyAListAudioFormat, value);
+
+  int get alistAudioConcurrency =>
+      _prefs.getInt(_keyAListAudioConcurrency) ?? 2;
+  Future<void> setAListAudioConcurrency(int value) =>
+      _prefs.setInt(_keyAListAudioConcurrency, value);
+
+  int get alistMinVideoSizeMB => _prefs.getInt(_keyAListMinVideoSizeMB) ?? 50;
+  Future<void> setAListMinVideoSizeMB(int value) =>
+      _prefs.setInt(_keyAListMinVideoSizeMB, value);
+
+  String get alistBlockedVideoNames =>
+      _prefs.getString(_keyAListBlockedVideoNames) ??
+      '台 妹 子 線 上 現 場 直 播 各 式 花 式 表 演.mp4\n社 區 最 新 情 報.mp4';
+  Future<void> setAListBlockedVideoNames(String value) =>
+      _prefs.setString(_keyAListBlockedVideoNames, value);
 
   Map<String, ProviderCredential> get llmProviderCredentials {
     final raw = _prefs.getString(_keyLlmProviderCredentials);

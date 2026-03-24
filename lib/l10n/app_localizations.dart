@@ -137,25 +137,25 @@ abstract class AppLocalizations {
   /// No description provided for @stepSelectVideo.
   ///
   /// In en, this message translates to:
-  /// **'Select Video'**
+  /// **'Select Media'**
   String get stepSelectVideo;
 
   /// No description provided for @clickToSelectVideo.
   ///
   /// In en, this message translates to:
-  /// **'Click to select a video file'**
+  /// **'Click to select a video or audio file'**
   String get clickToSelectVideo;
 
   /// No description provided for @supportedFormats.
   ///
   /// In en, this message translates to:
-  /// **'Supports MP4, MKV, AVI, MOV, WebM and more'**
+  /// **'Supports MP4, MKV, AVI, MOV, MP3, WAV and more'**
   String get supportedFormats;
 
   /// No description provided for @videoSelected.
   ///
   /// In en, this message translates to:
-  /// **'Video file selected'**
+  /// **'Media file selected'**
   String get videoSelected;
 
   /// No description provided for @changeFile.
@@ -341,7 +341,7 @@ abstract class AppLocalizations {
   /// No description provided for @extractingAudio.
   ///
   /// In en, this message translates to:
-  /// **'Extracting audio from video...'**
+  /// **'Extracting audio from media...'**
   String get extractingAudio;
 
   /// No description provided for @processingTranscription.

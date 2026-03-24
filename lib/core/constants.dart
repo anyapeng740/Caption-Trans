@@ -89,4 +89,22 @@ class AppConstants {
     'webm',
     'm4v',
   ];
+
+  /// Supported audio file extensions.
+  static const List<String> audioExtensions = [
+    'mp3',
+    'wav',
+    'm4a',
+    'aac',
+    'flac',
+    'ogg',
+    'opus',
+    'wma',
+  ];
+
+  /// Supported media file extensions (video + audio).
+  static const List<String> mediaExtensions = [
+    ...videoExtensions,
+    ...audioExtensions,
+  ];
 }

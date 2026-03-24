@@ -27,16 +27,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get error => '错误';
 
   @override
-  String get stepSelectVideo => '选择视频';
+  String get stepSelectVideo => '选择媒体';
 
   @override
-  String get clickToSelectVideo => '点击选择视频文件';
+  String get clickToSelectVideo => '点击选择视频或音频文件';
 
   @override
-  String get supportedFormats => '支持 MP4、MKV、AVI、MOV、WebM 等格式';
+  String get supportedFormats => '支持 MP4、MKV、AVI、MOV、MP3、WAV 等格式';
 
   @override
-  String get videoSelected => '已选择视频文件';
+  String get videoSelected => '已选择媒体文件';
 
   @override
   String get changeFile => '更换文件';
@@ -129,7 +129,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcriptionFinalizing => '正在整理转录结果...';
 
   @override
-  String get extractingAudio => '正在从视频中提取音频...';
+  String get extractingAudio => '正在从媒体中提取音频...';
 
   @override
   String get processingTranscription => '字幕转录中...';

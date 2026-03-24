@@ -825,13 +825,13 @@ def split_segment_by_words(
 
     words = normalize_word_entries(raw_segment.get("words"), language)
     if not words:
-        return [
-            {
-                "start": start,
-                "end": end if end >= start else start,
-                "text": text,
-            }
-        ]
+        return split_segment_without_words(
+            start,
+            end if end >= start else start,
+            text,
+            language,
+            segmentation_options,
+        )
 
     split_on_pause = to_bool(segmentation_options.get("split_on_pause"), True)
     prefer_punctuation_split = to_bool(
@@ -885,6 +885,130 @@ def split_segment_by_words(
         segment_start = segment_end
 
     return split_segments or [{"start": start, "end": end, "text": text}]
+
+
+def find_last_break_index(
+    text: str,
+    language: Optional[str],
+    min_chars: int,
+) -> Optional[int]:
+    if not text:
+        return None
+
+    break_chars = (
+        SENTENCE_END_PUNCTUATION
+        | SOFT_BREAK_PUNCTUATION
+        | CLOSING_PUNCTUATION
+        | {" ", "\n", "\t"}
+    )
+    for index in range(len(text) - 1, 0, -1):
+        if text[index] not in break_chars:
+            continue
+        head = text[: index + 1].strip()
+        tail = text[index + 1 :].strip()
+        if not head or not tail:
+            continue
+        if effective_char_count(head, language) < min_chars:
+            continue
+        return index + 1
+    return None
+
+
+def split_text_without_words(
+    text: str,
+    language: Optional[str],
+    max_chars: int,
+    min_split_chars: int,
+) -> List[str]:
+    normalized = text.strip()
+    if not normalized:
+        return []
+
+    chunks: List[str] = []
+    current = ""
+    break_chars = SENTENCE_END_PUNCTUATION | SOFT_BREAK_PUNCTUATION | {"\n"}
+
+    for ch in normalized:
+        current += ch
+        char_count = effective_char_count(current, language)
+
+        if ch in break_chars and char_count >= min_split_chars:
+            candidate = current.strip()
+            if candidate:
+                chunks.append(candidate)
+            current = ""
+            continue
+
+        if char_count < max_chars:
+            continue
+
+        split_index = find_last_break_index(current, language, min_split_chars)
+        if split_index is not None:
+            head = current[:split_index].strip()
+            tail = current[split_index:].strip()
+            if head:
+                chunks.append(head)
+            current = tail
+            continue
+
+        candidate = current.strip()
+        if candidate:
+            chunks.append(candidate)
+        current = ""
+
+    if current.strip():
+        chunks.append(current.strip())
+
+    return chunks
+
+
+def split_segment_without_words(
+    start: float,
+    end: float,
+    text: str,
+    language: Optional[str],
+    segmentation_options: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    duration = max(0.0, end - start)
+    max_duration = max(
+        0.5, to_float(segmentation_options.get("max_segment_duration_sec"), 6.0)
+    )
+    max_chars = max(1, to_int(segmentation_options.get("max_segment_chars"), 42))
+    min_split_chars = max(
+        1,
+        min(
+            max_chars,
+            to_int(segmentation_options.get("min_split_chars"), min(max_chars, 10)),
+        ),
+    )
+
+    total_chars = effective_char_count(text, language)
+    needs_split = duration > max_duration or total_chars > max_chars
+    if not needs_split:
+        return [{"start": start, "end": end, "text": text.strip()}]
+
+    chunks = split_text_without_words(text, language, max_chars, min_split_chars)
+    if len(chunks) <= 1:
+        return [{"start": start, "end": end, "text": text.strip()}]
+
+    weights = [max(1, effective_char_count(chunk, language)) for chunk in chunks]
+    total_weight = sum(weights)
+    if total_weight <= 0:
+        return [{"start": start, "end": end, "text": text.strip()}]
+
+    segments: List[Dict[str, Any]] = []
+    consumed_weight = 0
+    for index, chunk in enumerate(chunks):
+        seg_start = start + duration * (consumed_weight / total_weight)
+        consumed_weight += weights[index]
+        seg_end = end if index == len(chunks) - 1 else start + duration * (
+            consumed_weight / total_weight
+        )
+        if seg_end < seg_start:
+            seg_end = seg_start
+        segments.append({"start": seg_start, "end": seg_end, "text": chunk})
+
+    return normalize_segments(segments)
 
 
 def normalize_transcript_segments(

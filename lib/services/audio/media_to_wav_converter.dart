@@ -7,14 +7,11 @@ import 'package:path_provider/path_provider.dart';
 
 /// Converts media input into WhisperX-ready WAV audio.
 class MediaToWavConverter {
-  /// Convert [inputPath] to 16kHz mono 16-bit WAV if needed.
+  /// Convert [inputPath] to WhisperX-ready WAV (16kHz mono 16-bit PCM).
   ///
-  /// If [inputPath] is already a WAV file, returns [inputPath].
+  /// We always normalize via FFmpeg, even for `.wav` input, to guarantee
+  /// WhisperX loader compatibility.
   Future<String> ensureWhisperxWav(String inputPath) async {
-    if (p.extension(inputPath).toLowerCase() == '.wav') {
-      return inputPath;
-    }
-
     final tempDir = await getTemporaryDirectory();
     final outputDir = Directory(
       p.join(tempDir.path, 'caption_trans', 'whisperx'),

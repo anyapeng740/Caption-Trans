@@ -11,6 +11,7 @@ class SubtitlePreview extends StatelessWidget {
   final VoidCallback? onExportOriginal;
   final VoidCallback? onExportTranslated;
   final VoidCallback? onExportBilingual;
+  final VoidCallback? onUploadToAList;
 
   const SubtitlePreview({
     super.key,
@@ -21,6 +22,7 @@ class SubtitlePreview extends StatelessWidget {
     this.onExportOriginal,
     this.onExportTranslated,
     this.onExportBilingual,
+    this.onUploadToAList,
   });
 
   @override
@@ -72,6 +74,11 @@ class SubtitlePreview extends StatelessWidget {
             onPressed: onExportBilingual,
             primary: true,
           ),
+        _ExportButton(
+          label: '上传到 AList',
+          icon: Icons.cloud_upload_rounded,
+          onPressed: onUploadToAList,
+        ),
       ],
     );
   }

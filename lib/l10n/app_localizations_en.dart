@@ -27,16 +27,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get error => 'Error';
 
   @override
-  String get stepSelectVideo => 'Select Video';
+  String get stepSelectVideo => 'Select Media';
 
   @override
-  String get clickToSelectVideo => 'Click to select a video file';
+  String get clickToSelectVideo => 'Click to select a video or audio file';
 
   @override
-  String get supportedFormats => 'Supports MP4, MKV, AVI, MOV, WebM and more';
+  String get supportedFormats =>
+      'Supports MP4, MKV, AVI, MOV, MP3, WAV and more';
 
   @override
-  String get videoSelected => 'Video file selected';
+  String get videoSelected => 'Media file selected';
 
   @override
   String get changeFile => 'Change file';
@@ -132,7 +133,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get transcriptionFinalizing => 'Finalizing transcription result...';
 
   @override
-  String get extractingAudio => 'Extracting audio from video...';
+  String get extractingAudio => 'Extracting audio from media...';
 
   @override
   String get processingTranscription => 'Transcription in progress...';

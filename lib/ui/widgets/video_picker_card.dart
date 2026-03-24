@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:caption_trans/l10n/app_localizations.dart';
 
-/// Card for selecting a video file with drag-and-drop style UI.
+/// Card for selecting a media file with drag-and-drop style UI.
 class VideoPickerCard extends StatelessWidget {
+  static const double _desktopCardHeight = 175;
+  static const double _desktopCardHeightWithAction = 194;
+
   final String? selectedFileName;
   final VoidCallback onPickVideo;
+  final VoidCallback? onOpenAListAudioConvert;
   final VoidCallback? onClear;
 
   const VideoPickerCard({
     super.key,
     this.selectedFileName,
     required this.onPickVideo,
+    this.onOpenAListAudioConvert,
     this.onClear,
   });
 
@@ -21,12 +26,17 @@ class VideoPickerCard extends StatelessWidget {
     final platform = theme.platform;
     final isMobilePlatform =
         platform == TargetPlatform.iOS || platform == TargetPlatform.android;
+    final hasAListAction = onOpenAListAudioConvert != null;
 
     return Card(
       margin: EdgeInsets.zero,
       child: SizedBox(
         width: double.infinity,
-        height: isMobilePlatform ? null : 175,
+        height: isMobilePlatform
+            ? null
+            : (hasAListAction
+                  ? _desktopCardHeightWithAction
+                  : _desktopCardHeight),
         child: InkWell(
           onTap: onPickVideo,
           borderRadius: BorderRadius.circular(16),
@@ -74,6 +84,30 @@ class VideoPickerCard extends StatelessWidget {
             color: Colors.white.withValues(alpha: 0.5),
           ),
         ),
+        if (onOpenAListAudioConvert != null) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.center,
+            children: [
+              if (onOpenAListAudioConvert != null)
+                OutlinedButton.icon(
+                  onPressed: onOpenAListAudioConvert,
+                  icon: const Icon(Icons.audiotrack_rounded),
+                  label: const Text('AList 转音频'),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    minimumSize: const Size(0, 30),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -90,7 +124,7 @@ class VideoPickerCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
           ),
           child: const Icon(
-            Icons.video_file_rounded,
+            Icons.perm_media_rounded,
             color: Colors.greenAccent,
             size: 24,
           ),
@@ -129,6 +163,12 @@ class VideoPickerCard extends StatelessWidget {
           onPressed: onPickVideo,
           tooltip: l10n.changeFile,
         ),
+        if (onOpenAListAudioConvert != null)
+          IconButton(
+            icon: const Icon(Icons.audiotrack_rounded),
+            onPressed: onOpenAListAudioConvert,
+            tooltip: 'AList 转音频',
+          ),
       ],
     );
   }
