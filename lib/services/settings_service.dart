@@ -30,6 +30,8 @@ class SettingsService {
   static const String _keyTargetLanguage = 'target_language';
   static const String _keyBilingual = 'bilingual';
   static const String _keyBatchSize = 'batch_size';
+  static const String _keyWhisperModel = 'whisper_model';
+  static const String _keySourceVideoLanguage = 'source_video_language';
   static const String _keyLastUpdateCheckAt = 'last_update_check_at';
   static const String _keyWhisperDownloadSource = 'whisper_download_source';
   static const String _keyAListBaseUrl = 'alist_base_url';
@@ -42,6 +44,17 @@ class SettingsService {
   static const String _keyAListAudioConcurrency = 'alist_audio_concurrency';
   static const String _keyAListMinVideoSizeMB = 'alist_min_video_size_mb';
   static const String _keyAListBlockedVideoNames = 'alist_blocked_video_names';
+  static const String _keySubtitleBatchInputRoot = 'subtitle_batch_input_root';
+  static const String _keySubtitleBatchOutputRoot =
+      'subtitle_batch_output_root';
+  static const String _keySubtitleBatchConcurrency =
+      'subtitle_batch_concurrency';
+  static const String _keySubtitleBatchMinMediaSizeMB =
+      'subtitle_batch_min_media_size_mb';
+  static const String _keySubtitleBatchOnlyUnprocessed =
+      'subtitle_batch_only_unprocessed';
+  static const String _keySubtitleBatchEnableTranslation =
+      'subtitle_batch_enable_translation';
 
   final SharedPreferences _prefs;
 
@@ -87,6 +100,16 @@ class SettingsService {
 
   int get batchSize => _prefs.getInt(_keyBatchSize) ?? 25;
   Future<void> setBatchSize(int value) => _prefs.setInt(_keyBatchSize, value);
+
+  String get whisperModel =>
+      _prefs.getString(_keyWhisperModel) ?? 'large-v3-turbo';
+  Future<void> setWhisperModel(String value) =>
+      _prefs.setString(_keyWhisperModel, value);
+
+  String get sourceVideoLanguage =>
+      _prefs.getString(_keySourceVideoLanguage) ?? 'ja';
+  Future<void> setSourceVideoLanguage(String value) =>
+      _prefs.setString(_keySourceVideoLanguage, value);
 
   DateTime? get lastUpdateCheckAt {
     final timestamp = _prefs.getInt(_keyLastUpdateCheckAt);
@@ -155,6 +178,36 @@ class SettingsService {
       '台 妹 子 線 上 現 場 直 播 各 式 花 式 表 演.mp4\n社 區 最 新 情 報.mp4';
   Future<void> setAListBlockedVideoNames(String value) =>
       _prefs.setString(_keyAListBlockedVideoNames, value);
+
+  String get subtitleBatchInputRoot =>
+      _prefs.getString(_keySubtitleBatchInputRoot) ?? '';
+  Future<void> setSubtitleBatchInputRoot(String value) =>
+      _prefs.setString(_keySubtitleBatchInputRoot, value);
+
+  String get subtitleBatchOutputRoot =>
+      _prefs.getString(_keySubtitleBatchOutputRoot) ?? '';
+  Future<void> setSubtitleBatchOutputRoot(String value) =>
+      _prefs.setString(_keySubtitleBatchOutputRoot, value);
+
+  int get subtitleBatchConcurrency =>
+      _prefs.getInt(_keySubtitleBatchConcurrency) ?? 1;
+  Future<void> setSubtitleBatchConcurrency(int value) =>
+      _prefs.setInt(_keySubtitleBatchConcurrency, value);
+
+  int get subtitleBatchMinMediaSizeMB =>
+      _prefs.getInt(_keySubtitleBatchMinMediaSizeMB) ?? 50;
+  Future<void> setSubtitleBatchMinMediaSizeMB(int value) =>
+      _prefs.setInt(_keySubtitleBatchMinMediaSizeMB, value);
+
+  bool get subtitleBatchOnlyUnprocessed =>
+      _prefs.getBool(_keySubtitleBatchOnlyUnprocessed) ?? true;
+  Future<void> setSubtitleBatchOnlyUnprocessed(bool value) =>
+      _prefs.setBool(_keySubtitleBatchOnlyUnprocessed, value);
+
+  bool get subtitleBatchEnableTranslation =>
+      _prefs.getBool(_keySubtitleBatchEnableTranslation) ?? true;
+  Future<void> setSubtitleBatchEnableTranslation(bool value) =>
+      _prefs.setBool(_keySubtitleBatchEnableTranslation, value);
 
   Map<String, ProviderCredential> get llmProviderCredentials {
     final raw = _prefs.getString(_keyLlmProviderCredentials);

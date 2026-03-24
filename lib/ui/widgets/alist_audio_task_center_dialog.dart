@@ -14,7 +14,6 @@ class _AListAudioTaskCenterDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final AListAudioTaskManager manager = AListAudioTaskManager.instance;
     final ThemeData theme = Theme.of(context);
 
     return Dialog(
@@ -24,69 +23,96 @@ class _AListAudioTaskCenterDialog extends StatelessWidget {
         height: 720,
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: AnimatedBuilder(
-            animation: manager,
-            builder: (BuildContext context, _) {
-              final List<AListAudioBatchTask> batches = manager.batches;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Row(
                 children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      Icon(
-                        Icons.bubble_chart_rounded,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          '后台任务',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      if (batches.isNotEmpty)
-                        TextButton(
-                          onPressed: manager.clearFinished,
-                          child: const Text('清理已完成'),
-                        ),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                    ],
+                  Icon(
+                    Icons.bubble_chart_rounded,
+                    color: theme.colorScheme.primary,
                   ),
-                  const SizedBox(height: 12),
-                  if (batches.isEmpty)
-                    Expanded(
-                      child: Center(
-                        child: Text(
-                          '当前没有后台任务。',
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            color: Colors.white.withValues(alpha: 0.65),
-                          ),
-                        ),
-                      ),
-                    )
-                  else
-                    Expanded(
-                      child: ListView.separated(
-                        itemCount: batches.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 12),
-                        itemBuilder: (BuildContext context, int index) {
-                          final AListAudioBatchTask batch = batches[index];
-                          return _BatchCard(batch: batch, manager: manager);
-                        },
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      '后台任务',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
                 ],
-              );
-            },
+              ),
+              const SizedBox(height: 12),
+              const Expanded(child: AListAudioTaskCenterPanel()),
+            ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class AListAudioTaskCenterPanel extends StatelessWidget {
+  const AListAudioTaskCenterPanel({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final AListAudioTaskManager manager = AListAudioTaskManager.instance;
+    final ThemeData theme = Theme.of(context);
+
+    return AnimatedBuilder(
+      animation: manager,
+      builder: (BuildContext context, _) {
+        final List<AListAudioBatchTask> batches = manager.batches;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                const Text(
+                  'AList 转音频任务',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                const Spacer(),
+                if (batches.isNotEmpty)
+                  TextButton(
+                    onPressed: manager.clearFinished,
+                    child: const Text('清理已完成'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (batches.isEmpty)
+              Expanded(
+                child: Center(
+                  child: Text(
+                    '当前没有音频转换任务。',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.65),
+                    ),
+                  ),
+                ),
+              )
+            else
+              Expanded(
+                child: ListView.separated(
+                  itemCount: batches.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
+                  itemBuilder: (BuildContext context, int index) {
+                    final AListAudioBatchTask batch = batches[index];
+                    return _BatchCard(batch: batch, manager: manager);
+                  },
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

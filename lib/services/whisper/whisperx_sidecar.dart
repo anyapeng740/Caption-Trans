@@ -320,16 +320,20 @@ class WhisperXSidecar {
     if (readyCompleter != null && !readyCompleter.isCompleted) {
       readyCompleter.completeError(error);
     }
-    for (final pending in _pending.values) {
+    _failPendingRequests(error);
+    _activeRequestForLogs = null;
+    _runtimeProbeFuture = null;
+    _startedStartupProfileId = null;
+    _process = null;
+  }
+
+  void _failPendingRequests(Exception error) {
+    for (final _PendingRequest pending in _pending.values) {
       if (!pending.completer.isCompleted) {
         pending.completer.completeError(error);
       }
     }
     _pending.clear();
-    _activeRequestForLogs = null;
-    _runtimeProbeFuture = null;
-    _startedStartupProfileId = null;
-    _process = null;
   }
 
   Future<Map<String, dynamic>> transcribe({
@@ -441,8 +445,18 @@ class WhisperXSidecar {
   }
 
   Future<void> dispose() async {
+    final Exception disposeError = Exception('WhisperX sidecar stopped.');
     final Process? process = _process;
     if (process == null) {
+      final Completer<void>? readyCompleter = _readyCompleter;
+      if (readyCompleter != null && !readyCompleter.isCompleted) {
+        readyCompleter.completeError(disposeError);
+      }
+      _failPendingRequests(disposeError);
+      _readyCompleter = null;
+      _activeRequestForLogs = null;
+      _runtimeProbeFuture = null;
+      _startedStartupProfileId = null;
       return;
     }
 
@@ -463,9 +477,13 @@ class WhisperXSidecar {
     await _stderrSub?.cancel();
     _stdoutSub = null;
     _stderrSub = null;
+    final Completer<void>? readyCompleter = _readyCompleter;
+    if (readyCompleter != null && !readyCompleter.isCompleted) {
+      readyCompleter.completeError(disposeError);
+    }
     _process = null;
     _readyCompleter = null;
-    _pending.clear();
+    _failPendingRequests(disposeError);
     _activeRequestForLogs = null;
     _runtimeProbeFuture = null;
     _startedStartupProfileId = null;

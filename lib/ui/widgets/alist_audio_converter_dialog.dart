@@ -6,7 +6,7 @@ import 'package:caption_trans/services/settings_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
-import 'alist_audio_task_center_dialog.dart';
+import 'background_job_center_dialog.dart';
 
 Future<void> showAListAudioConverterDialog(
   BuildContext context, {
@@ -390,7 +390,10 @@ class _AListAudioConverterDialogState
   }
 
   Future<void> _openTaskCenter() {
-    return showAListAudioTaskCenterDialog(context);
+    return showBackgroundJobCenterDialog(
+      context,
+      initialTab: BackgroundJobTab.audio,
+    );
   }
 
   @override

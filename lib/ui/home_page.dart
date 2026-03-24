@@ -36,8 +36,10 @@ import '../models/subtitle_segment.dart';
 import '../services/update_service.dart';
 import '../services/alist/alist_service.dart';
 import '../services/alist/alist_audio_task_manager.dart';
+import '../services/subtitle/subtitle_batch_task_manager.dart';
 import 'widgets/update_dialog.dart';
-import 'widgets/alist_audio_task_center_dialog.dart';
+import 'widgets/background_job_center_dialog.dart';
+import 'widgets/subtitle_batch_dialog.dart';
 
 enum _AListUploadMode { original, translated, bilingual }
 
@@ -96,6 +98,8 @@ class _HomePageState extends State<HomePage> {
 
     setState(() {
       _savedProviderCredentials = savedCredentials;
+      _selectedModel = widget.settingsService.whisperModel;
+      _sourceVideoLanguage = widget.settingsService.sourceVideoLanguage;
       _targetModel = widget.settingsService.geminiModel;
       _llmProvider = provider;
       _llmBaseUrl =
@@ -423,10 +427,16 @@ class _HomePageState extends State<HomePage> {
                             state: state,
                             selectedModel: _selectedModel,
                             selectedSourceLanguage: _sourceVideoLanguage,
-                            onModelChanged: (model) =>
-                                setState(() => _selectedModel = model),
-                            onSourceLanguageChanged: (language) =>
-                                setState(() => _sourceVideoLanguage = language),
+                            onModelChanged: (model) {
+                              setState(() => _selectedModel = model);
+                              widget.settingsService.setWhisperModel(model);
+                            },
+                            onSourceLanguageChanged: (language) {
+                              setState(() => _sourceVideoLanguage = language);
+                              widget.settingsService.setSourceVideoLanguage(
+                                language,
+                              );
+                            },
                             onStartTranscription: () {
                               _handleStartTranscription(context);
                             },
@@ -608,37 +618,43 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-            _buildAudioTaskBubble(context),
+            _buildBackgroundJobBubble(context),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildAudioTaskBubble(BuildContext context) {
-    final AListAudioTaskManager manager = AListAudioTaskManager.instance;
+  Widget _buildBackgroundJobBubble(BuildContext context) {
+    final AListAudioTaskManager audioManager = AListAudioTaskManager.instance;
+    final SubtitleBatchTaskManager subtitleManager =
+        SubtitleBatchTaskManager.instance;
     return AnimatedBuilder(
-      animation: manager,
+      animation: Listenable.merge(<Listenable>[audioManager, subtitleManager]),
       builder: (BuildContext context, _) {
-        if (!manager.hasTasks) {
+        if (!audioManager.hasTasks && !subtitleManager.hasTasks) {
           return const SizedBox.shrink();
         }
-        final List<AListAudioBatchTask> activeBatches = manager.batches
-            .where(
-              (AListAudioBatchTask batch) =>
-                  batch.status == AListAudioBatchStatus.queued ||
-                  batch.status == AListAudioBatchStatus.running,
-            )
-            .toList();
-        double progress = 1;
-        if (activeBatches.isNotEmpty) {
-          progress =
-              activeBatches
-                  .map((AListAudioBatchTask batch) => batch.progress)
-                  .reduce((double a, double b) => a + b) /
-              activeBatches.length;
-        }
-        final int badgeCount = manager.activeBatchCount;
+        final List<double> activeProgress = <double>[
+          if (subtitleManager.activeBatchCount > 0)
+            subtitleManager.activeProgress,
+          if (audioManager.activeBatchCount > 0)
+            audioManager.batches
+                    .where(
+                      (AListAudioBatchTask batch) =>
+                          batch.status == AListAudioBatchStatus.queued ||
+                          batch.status == AListAudioBatchStatus.running,
+                    )
+                    .map((AListAudioBatchTask batch) => batch.progress)
+                    .reduce((double a, double b) => a + b) /
+                audioManager.activeBatchCount,
+        ];
+        final double progress = activeProgress.isEmpty
+            ? 1
+            : activeProgress.reduce((double a, double b) => a + b) /
+                  activeProgress.length;
+        final int badgeCount =
+            audioManager.activeBatchCount + subtitleManager.activeBatchCount;
 
         return Positioned(
           right: 24,
@@ -649,7 +665,7 @@ class _HomePageState extends State<HomePage> {
               color: Colors.transparent,
               child: InkWell(
                 borderRadius: BorderRadius.circular(999),
-                onTap: () => showAListAudioTaskCenterDialog(context),
+                onTap: () => showBackgroundJobCenterDialog(context),
                 child: SizedBox(
                   width: 68,
                   height: 68,
@@ -772,6 +788,7 @@ class _HomePageState extends State<HomePage> {
         return VideoPickerCard(
           selectedFileName: _getFileName(state),
           onPickVideo: () => _pickVideo(context),
+          onOpenSubtitleBatch: () => _openSubtitleBatchDialog(context),
           onOpenAListAudioConvert: () => _openAListAudioConverter(context),
           onClear: state is! TranscriptionInitial
               ? () => context.read<TranscriptionBloc>().add(
@@ -896,6 +913,13 @@ class _HomePageState extends State<HomePage> {
         context.read<TranslationBloc>().add(const ResetTranslation());
       }
     }
+  }
+
+  Future<void> _openSubtitleBatchDialog(BuildContext context) async {
+    await showSubtitleBatchDialog(
+      context,
+      settingsService: widget.settingsService,
+    );
   }
 
   Future<void> _openAListAudioConverter(BuildContext context) async {
